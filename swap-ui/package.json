@@ -11,10 +11,12 @@
   },
   "dependencies": {
     "@lightninglabs/lnc-web": "0.3.5-alpha",
+    "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-query": "^5.90.21",
     "ethereum-cryptography": "^3.2.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "tailwindcss": "^4.1.18",
     "viem": "^2.45.3",
     "wagmi": "^3.4.3"
   },
