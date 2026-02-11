@@ -60,7 +60,7 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 // --- Configuration ---
 const ALICE_LITD_REST_HOST = process.env.ALICE_LITD_REST_HOST;
 const ALICE_LITD_ADMIN_MACAROON_HEX = process.env.ALICE_LITD_ADMIN_MACAROON_HEX;
-
+const ALICE_LITD_INVOICE_MACAROON_HEX = process.env.ALICE_LITD_INVOICE_MACAROON_HEX;
 const BOB_LITD_REST_HOST = process.env.BOB_LITD_REST_HOST;
 const BOB_LITD_ADMIN_MACAROON_HEX = process.env.BOB_LITD_ADMIN_MACAROON_HEX;
 
@@ -98,7 +98,7 @@ describe("AtomicSwap BNB <> Taproot Assets (Lightning HTLC)", async function () 
 
     let aliceTapdClient: any;
     let bobTapdClient: any;
-
+    let aliceInvoiceClient: any;
     // Secret and hashlock are NOT pre-generated here for the main swap
     // They will be derived from Alice's invoice.
     const atomicSwapSecret: Hex = generateSecret(); // This is the secret Bob will claim with on BSC
@@ -130,6 +130,7 @@ describe("AtomicSwap BNB <> Taproot Assets (Lightning HTLC)", async function () 
 
         aliceTapdClient = getTapdAxiosClient(ALICE_LITD_REST_HOST, ALICE_LITD_ADMIN_MACAROON_HEX);
         bobTapdClient = getTapdAxiosClient(BOB_LITD_REST_HOST, BOB_LITD_ADMIN_MACAROON_HEX);
+        aliceInvoiceClient = getTapdAxiosClient(ALICE_LITD_REST_HOST, ALICE_LITD_INVOICE_MACAROON_HEX);
 
         console.log("--- Starting Atomic Swap Test ---");
     });
@@ -243,12 +244,12 @@ describe("AtomicSwap BNB <> Taproot Assets (Lightning HTLC)", async function () 
         // This step is mostly for verification. Alice implicitly knows it's settled if Bob paid.
         console.log("\n--- 5. Alice: Confirming Taproot Asset Invoice Settlement ---");
         try {
-            console.log(toUrlSafeBase64(hexToBase64(aliceLnPaymentHash)))
-            const aliceInvoiceStatus = await aliceTapdClient.get(`/v2/invoices/lookup?payment_hash=${toUrlSafeBase64(hexToBase64(aliceLnPaymentHash))}`);
+            const base64EncodedPaymentHash = toUrlSafeBase64(hexToBase64(aliceLnPaymentHash));
+            const aliceInvoiceStatus = await aliceInvoiceClient.get(`/v2/invoices/lookup?payment_hash=${base64EncodedPaymentHash}`);
             console.log(`[Alice] Taproot Asset Invoice status: ${aliceInvoiceStatus}`);
             assert.equal(aliceInvoiceStatus.data.state, "SETTLED", "Alice's invoice should be settled after Bob pays.");
             assert.ok(aliceInvoiceStatus.data.r_preimage, "Alice's settled invoice should contain the preimage.");
-            assert.equal(base64ToHex(aliceInvoiceStatus.data.r_preimage), aliceLnPreimage, "Alice's retrieved preimage must match the one revealed to Bob.");
+            assert.equal(base64ToHex(aliceInvoiceStatus.data.r_preimage), '0x'+aliceLnPreimage, "Alice's retrieved preimage must match the one revealed to Bob.");
         } catch (error: any) {
             console.error("Error confirming Alice's invoice status:", error.response?.data?.error || error.response?.data || error.message || error);
             assert.fail(`Failed for Alice to confirm invoice settlement: ${error.message || error.response?.data?.error || JSON.stringify(error.response?.data)}`);
