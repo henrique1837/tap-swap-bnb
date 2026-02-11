@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAccount, useWalletClient, usePublicClient, useConnect, useChainId, useChains } from 'wagmi';
 import { injected } from 'wagmi/connectors';
-
+import { useLNC } from './hooks/useLNC';
 // IMPORTANT: Import taprpc and wstrpcrpc for service configuration
 import LNC, { taprpc, wstrpcrpc } from '@lightninglabs/lnc-web';
 import { bytesToHex, parseEther } from 'viem';
@@ -131,17 +131,13 @@ function App() {
   const { connect } = useConnect();
   const currentChainId = useChainId();
   const configuredChains = useChains();
-
-  const currentChain = configuredChains.find(c => c.id === currentChainId);
+  const { lncClient, status: lncStatus, connect: connectLNC, error: lncError } = useLNC();  const currentChain = configuredChains.find(c => c.id === currentChainId);
 
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
 
   // --- LNC State for Lightning Node Connection ---
-  const [lncStatus, setLncStatus] = useState('Disconnected');
   const [lncPairingPhrase, setLncPairingPhrase] = useState('');
-  const [lncClient, setLncClient] = useState(null);
-  const [isLncWasmReady, setIsLncWasmReady] = useState(false); // New state to track WASM readiness
 
   // --- Swap Specific State ---
   const [invoicePaymentRequest, setInvoicePaymentRequest] = useState('');
@@ -157,52 +153,24 @@ function App() {
     setLncPairingPhrase(e.target.value);
   };
 
-  const connectToLNC = async () => {
+  const handleConnectLNC = async () => {
     if (!lncPairingPhrase) {
       setErrorMessage('Please enter your LNC Pairing Phrase.');
       return;
     }
-    const tempLncInstance = new LNC({
-      pairingPhrase: lncPairingPhrase, 
-    });
-
-    // Preload the WASM module
-    await tempLncInstance.preload();
-    console.log("LNC WASM preloaded.");
-
-    // Run the WASM module
-    tempLncInstance.run(); // This typically blocks until WASM is ready
-    console.log("LNC WASM runtime started.");
-
-    setLncClient(tempLncInstance); // Store this instance for later use
-    setIsLncWasmReady(true);
-    setLncStatus('Connecting...');
     setErrorMessage('');
-
     try {
-
-      // Now, connect using the preloaded and running WASM instance
-      await tempLncInstance.connect();
-
-      setLncStatus('Connected to Lightning Node');
-      setErrorMessage('');
-      setLncPairingPhrase(''); // Clear phrase on successful connection
-
+      await connectLNC(lncPairingPhrase);
+      setLncPairingPhrase(''); 
     } catch (err) {
-      console.error('LNC Connection Error:', err);
-      setLncStatus('Disconnected');
-      setErrorMessage(`LNC Connection Failed: ${err.message || String(err)}. Check console for details.`);
-      tempLncInstance.disconnect(); // Explicitly disconnect on error
-      setLncClient(null); // Clear client on failure
-      setIsLncWasmReady(false); // Reset WASM state as well
+      // Error is already handled by hook, but you can add local logging here
     }
   };
 
-  // --- Utility to check if LNC is ready for API calls ---
+  // --- Utility to check if LNC is ready ---
   const isLncApiReady = useCallback(() => {
-    // Check if LNC client exists, WASM is ready, and LNC internal `isReady` flag is true
-    return !!lncClient && isLncWasmReady && lncClient.isReady;
-  }, [lncClient, isLncWasmReady]);
+    return !!lncClient && lncClient.isReady;
+  }, [lncClient]);
 
 
   // --- Swap Step 1: Create Lightning Invoice ---
@@ -348,7 +316,7 @@ function App() {
         pairingPhrase={lncPairingPhrase}
         setPairingPhrase={handleLncPairingPhraseChange}
         isConnectingLNC={lncStatus === 'Connecting...'}
-        handleConnectLNC={connectToLNC}
+        handleConnectLNC={handleConnectLNC}
         connectionErrorLNC={errorMessage}
         isWeb3Connected={isConnected}
         web3Address={address}
