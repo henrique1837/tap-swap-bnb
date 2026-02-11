@@ -152,49 +152,6 @@ function App() {
 
   const contractAddress = ATOMIC_SWAP_BNB_CONTRACT_ADDRESS;
 
-  // --- LNC WASM Preload and Run Effect ---
-  useEffect(() => {
-    const initLncWasm = async () => {
-      if (!lncClient && !isLncWasmReady) { // Only run if LNC client not initialized and WASM not ready
-        try {
-          // Initialize LNC client instance (without connecting yet)
-          const tempLncInstance = new LNC({
-            pairingPhrase: '', // Phrase will be set later during connect
-          });
-
-          // Preload the WASM module
-          await tempLncInstance.preload();
-          console.log("LNC WASM preloaded.");
-
-          // Run the WASM module
-          tempLncInstance.run(); // This typically blocks until WASM is ready
-          console.log("LNC WASM runtime started.");
-
-          setLncClient(tempLncInstance); // Store this instance for later use
-          setIsLncWasmReady(true);
-        } catch (err) {
-          console.error('LNC WASM Initialization Error:', err);
-          setErrorMessage(`Failed to initialize LNC WASM: ${err.message || String(err)}. Check console.`);
-          setIsLncWasmReady(false);
-          setLncClient(null);
-        }
-      }
-    };
-
-    initLncWasm();
-
-    // Cleanup function if needed (e.g., if LNC has a dispose method)
-    return () => {
-        // You might need to call lncClient.disconnect() or a cleanup here
-        // if the component unmounts and lncClient is still active.
-        if (lncClient && lncClient.isConnected) {
-            lncClient.disconnect();
-            console.log("LNC client disconnected on cleanup.");
-        }
-    };
-  }, [lncClient, isLncWasmReady]); // Rerun if lncClient or wasmReady state changes
-
-
   // --- LNC Connection Handlers ---
   const handleLncPairingPhraseChange = (e) => {
     setLncPairingPhrase(e.target.value);
@@ -205,18 +162,27 @@ function App() {
       setErrorMessage('Please enter your LNC Pairing Phrase.');
       return;
     }
-    if (!isLncWasmReady || !lncClient) {
-        setErrorMessage('LNC WASM not ready. Please wait or refresh.');
-        return;
-    }
+    const tempLncInstance = new LNC({
+      pairingPhrase: lncPairingPhrase, 
+    });
 
+    // Preload the WASM module
+    await tempLncInstance.preload();
+    console.log("LNC WASM preloaded.");
+
+    // Run the WASM module
+    tempLncInstance.run(); // This typically blocks until WASM is ready
+    console.log("LNC WASM runtime started.");
+
+    setLncClient(tempLncInstance); // Store this instance for later use
+    setIsLncWasmReady(true);
     setLncStatus('Connecting...');
     setErrorMessage('');
 
     try {
 
       // Now, connect using the preloaded and running WASM instance
-      await lncClient.connect();
+      await tempLncInstance.connect();
 
       setLncStatus('Connected to Lightning Node');
       setErrorMessage('');
@@ -226,7 +192,7 @@ function App() {
       console.error('LNC Connection Error:', err);
       setLncStatus('Disconnected');
       setErrorMessage(`LNC Connection Failed: ${err.message || String(err)}. Check console for details.`);
-      lncClient.disconnect(); // Explicitly disconnect on error
+      tempLncInstance.disconnect(); // Explicitly disconnect on error
       setLncClient(null); // Clear client on failure
       setIsLncWasmReady(false); // Reset WASM state as well
     }
