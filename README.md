@@ -22,6 +22,10 @@ This project demonstrates a practical cross-domain swap UX where participants:
 ## Project Structure
 
 - `swap-ui/`: Frontend app (React + Vite) that manages LNC, Nostr, and swap flow UX.
+  - **Tabbed Interface**: `Create`, `Market`, `Lock`, `Claim`.
+  - **Role Segregation**: Context-aware UI for Locker (Publisher/Accepter) and Claimer.
+  - **Nostr Integration**: Decentralized order book and status updates.
+  - **LNC Integration**: Direct Lightning Node Connection for invoice generation and payments.
 - `contracts/`: Hardhat project containing the EVM-side HTLC contract (`AtomicSwapBNB.sol`).
 
 ## High-Level Flow

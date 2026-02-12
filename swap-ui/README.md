@@ -9,7 +9,7 @@ The UI connects:
 - EVM wallet (for BNB lock transactions)
 - Nostr (for intention, acceptance, and invoice coordination events)
 
-The app uses a step-based UX (`Create`, `Market`, `Execute`) and auto-advances tabs based on progress.
+The app uses a step-based UX (`Create`, `Market`, `Lock`, `Claim`) and isolates logic by role.
 
 ## Main UX Flow
 
@@ -18,33 +18,42 @@ The app uses a step-based UX (`Create`, `Market`, `Execute`) and auto-advances t
 
 2. `Market`
 - Users browse open intentions and accept one.
-- Test mode can allow self-accept for local testing.
+- **Test Mode**: Allows self-accept for local testing.
 
-3. `Execute`
-- Correct role generates Lightning invoice.
-- Correct role locks BNB on-chain.
-- Invoice details are published to Nostr after successful lock.
-- Counterparty proceeds to payment/claim side.
+3. `Lock (Execute)`
+- **Role**: The party responsible for locking BNB (Locker).
+- Generates Lightning invoice or waits for Counterparty's invoice.
+- Locks BNB on the atomic swap contract.
+- Invoice details are published to Nostr automatically.
+
+4. `Claim`
+- **Role**: The party who receives BNB (Claimer).
+- **Provide Invoice**: If needed, generates/submits LN invoice for the Locker.
+- **Verify**: Checks if BNB is locked on-chain.
+- **Pay**: Pays the Lightning invoice via LNC (or manual).
+- **Claim**: Uses the revealed preimage to claim the locked BNB.
 
 ## Role Rules
 
 - If intention wants `BNB`:
-  - Accepter generates invoice
-  - Accepter locks BNB
-  - Poster waits, then pays invoice and claims BNB path
+  - **Locker**: Accepter (Generates Invoice -> Locks BNB).
+  - **Claimer**: Poster (Pays Invoice -> Claims BNB).
 
 - If intention wants `TAPROOT_BNB`:
-  - Poster generates invoice
-  - Poster locks BNB
-  - Accepter proceeds after invoice is published
+  - **Locker**: Poster (Generates Invoice -> Locks BNB).
+  - **Claimer**: Accepter (Pays Invoice -> Claims BNB).
 
 ## Key UI Files
 
-- `src/App.jsx`: Main orchestration and tab UX.
-- `src/contexts/NostrContext.jsx`: Nostr event publish/fetch logic.
-- `src/components/SwapIntentionsList.jsx`: Intention list and acceptance UI.
-- `src/components/CreateSwapIntention.jsx`: New intention publishing UI.
-- `src/components/ConnectScreen.jsx`: LNC + wallet connection screen.
+- `src/App.jsx`: Main orchestration, state management, and tabbed workflow.
+- `src/contexts/NostrContext.jsx`: Nostr event publishing, fetching, and coordination logic.
+- `src/components/ClaimableIntentionsList.jsx`: [NEW] Specialized list for filtering and selecting claimable swaps.
+- `src/components/SwapIntentionsList.jsx`: Market list for browsing and accepting open swap intentions.
+- `src/components/CreateSwapIntention.jsx`: UI for defining and publishing new swap intentions.
+- `src/components/ConnectScreen.jsx`: LNC + EVM Wallet connection and authentication screen.
+- `src/components/InvoiceDecoder.jsx`: Utility component for visualizing and verifying Lightning invoices.
+- `src/components/NodeInfo.jsx`: Modal displaying connected Lightning node URI and Taproot Asset balances.
+- `src/components/NostrIdentityDisplay.jsx`: Modal for viewing and managing the derived Nostr identity.
 
 ## Run
 
