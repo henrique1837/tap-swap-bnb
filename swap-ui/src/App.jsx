@@ -66,6 +66,8 @@ function AppContent() {
   const [wantedAsset, setWantedAsset] = useState('BNB');
   const [allowSelfAccept, setAllowSelfAccept] = useState(true);
 
+  const [activeTab, setActiveTab] = useState('create');
+
   // Locally generated invoice that is not yet published to Nostr.
   const [pendingInvoice, setPendingInvoice] = useState(null);
 
@@ -89,18 +91,11 @@ function AppContent() {
       (lockerRole === 'accepter' && isSelectedAccepter));
 
   const pendingInvoiceForSelected = Boolean(
-    pendingInvoice &&
-      selectedSwapIntention &&
-      pendingInvoice.dTag === selectedSwapIntention.dTag,
+    pendingInvoice && selectedSwapIntention && pendingInvoice.dTag === selectedSwapIntention.dTag,
   );
 
-  const effectiveInvoicePaymentHash = pendingInvoiceForSelected
-    ? pendingInvoice.paymentHash
-    : invoicePaymentHash;
-
-  const effectiveInvoicePaymentRequest = pendingInvoiceForSelected
-    ? pendingInvoice.paymentRequest
-    : invoicePaymentRequest;
+  const effectiveInvoicePaymentHash = pendingInvoiceForSelected ? pendingInvoice.paymentHash : invoicePaymentHash;
+  const effectiveInvoicePaymentRequest = pendingInvoiceForSelected ? pendingInvoice.paymentRequest : invoicePaymentRequest;
 
   const canGenerateInvoice = Boolean(selectedSwapIntention) && isSelectedAccepted && isPublisherRoleMatch;
   const canLockBnb = Boolean(selectedSwapIntention) && isSelectedAccepted && isLockerRoleMatch && Boolean(effectiveInvoicePaymentHash);
@@ -108,7 +103,7 @@ function AppContent() {
   const generateInvoiceDisabledReason = !selectedSwapIntention
     ? 'Select an intention first.'
     : !isSelectedAccepted
-      ? 'This intention must be accepted first. Use Accept in the list.'
+      ? 'This intention must be accepted first. Use Accept in Market.'
       : !isPublisherRoleMatch
         ? (selectedWantedAsset === 'BNB'
           ? 'For wants BNB, only accepter can generate invoice.'
@@ -126,6 +121,27 @@ function AppContent() {
             ? 'For wants BNB, only accepter locks BNB.'
             : 'For wants Taproot BNB, only poster locks BNB.')
           : '';
+
+  // Auto move between tabs based on progress.
+  useEffect(() => {
+    if (!selectedSwapIntention) {
+      setActiveTab('create');
+      return;
+    }
+
+    if (!isSelectedAccepted) {
+      setActiveTab('market');
+      return;
+    }
+
+    setActiveTab('execute');
+  }, [selectedSwapIntention, isSelectedAccepted]);
+
+  const tabClass = (key) => `px-4 py-2 rounded-md text-sm font-medium transition ${
+    activeTab === key
+      ? 'bg-indigo-600 text-white shadow'
+      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+  }`;
 
   const handleLncPairingPhraseChange = (e) => setLncPairingPhrase(e.target.value);
   const handleLncPasswordChange = (e) => setLncPassword(e.target.value);
@@ -221,6 +237,7 @@ function AppContent() {
     setInvoicePaymentHash(invoice.paymentHash);
     setSwapStatus('Invoice generated locally. Now lock BNB. Invoice will be published after lock.');
     setErrorMessage('');
+    setActiveTab('execute');
   };
 
   const handlePublishSwapIntention = async () => {
@@ -243,8 +260,9 @@ function AppContent() {
       }, address);
 
       if (intentionId) {
-        setSwapStatus('Intention published. Wait for another user to accept.');
+        setSwapStatus('Intention published. Move to Market tab and wait for acceptance.');
         setErrorMessage('');
+        setActiveTab('market');
       } else {
         setErrorMessage('Failed to publish swap intention to Nostr.');
       }
@@ -286,7 +304,6 @@ function AppContent() {
 
       await publicClient.waitForTransactionReceipt({ hash });
 
-      // Publish to Nostr only after lock succeeds.
       if (pendingInvoiceForSelected && pendingInvoice && selectedSwapIntention) {
         setSwapStatus('BNB locked. Publishing invoice to Nostr...');
         await publishInvoiceForIntention(selectedSwapIntention, pendingInvoice, address || '');
@@ -359,6 +376,7 @@ function AppContent() {
       setInvoicePreimage(null);
       setPendingInvoice(null);
       setSwapStatus('Idle');
+      setActiveTab('create');
     }
   }, [isLncApiReady]);
 
@@ -427,116 +445,140 @@ function AppContent() {
 
       <NostrIdentityDisplay />
 
-      <CreateSwapIntention
-        handlePublishSwapIntention={handlePublishSwapIntention}
-        nostrPubkey={nostrPubkey}
-        swapStatus={swapStatus}
-        SWAP_AMOUNT_TAP_SATOSHIS={SWAP_AMOUNT_TAP_SATOSHIS}
-        swapAmountBNB={SWAP_AMOUNT_BNB.toString()}
-        wantedAsset={wantedAsset}
-        setWantedAsset={setWantedAsset}
-      />
-
-      <div className="w-full max-w-2xl mt-4 flex items-center gap-2">
-        <input
-          id="self-accept"
-          type="checkbox"
-          checked={allowSelfAccept}
-          onChange={(e) => setAllowSelfAccept(e.target.checked)}
-        />
-        <label htmlFor="self-accept" className="text-sm text-gray-700">
-          Test mode: allow accepting my own intention
-        </label>
+      <div className="w-full max-w-2xl mb-4">
+        <div className="flex gap-2 border-b pb-3">
+          <button className={tabClass('create')} onClick={() => setActiveTab('create')}>1. Create</button>
+          <button className={tabClass('market')} onClick={() => setActiveTab('market')}>2. Market</button>
+          <button className={tabClass('execute')} onClick={() => setActiveTab('execute')}>3. Execute</button>
+        </div>
       </div>
 
-      <SwapIntentionsList
-        setSelectedSwapIntention={setSelectedSwapIntention}
-        selectedSwapIntention={selectedSwapIntention}
-        setInvoicePaymentRequest={setInvoicePaymentRequest}
-        setInvoicePaymentHash={setInvoicePaymentHash}
-        setErrorMessage={setErrorMessage}
-        setSwapStatus={setSwapStatus}
-        evmAddress={address}
-        allowSelfAccept={allowSelfAccept}
-      />
+      {activeTab === 'create' && (
+        <>
+          <CreateSwapIntention
+            handlePublishSwapIntention={handlePublishSwapIntention}
+            nostrPubkey={nostrPubkey}
+            swapStatus={swapStatus}
+            SWAP_AMOUNT_TAP_SATOSHIS={SWAP_AMOUNT_TAP_SATOSHIS}
+            swapAmountBNB={SWAP_AMOUNT_BNB.toString()}
+            wantedAsset={wantedAsset}
+            setWantedAsset={setWantedAsset}
+          />
 
-      {selectedSwapIntention && (
-        <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-2xl mt-8">
-          <h2 className="text-2xl font-semibold text-gray-700 mb-4">Next Step</h2>
-
-          <p className="text-sm text-gray-700 mb-1">
-            Selected intention wants: <strong>{selectedWantedAsset || 'BNB'}</strong>
-          </p>
-          <p className="text-sm text-gray-700 mb-2">
-            Current status: <strong>{selectedSwapIntention.status}</strong>
-          </p>
-
-          {selectedWantedAsset === 'BNB' && (
-            <p className="text-sm text-indigo-700 mb-3">
-              Rule: accepter generates invoice, locks BNB, then publishes invoice. Poster pays invoice and claims BNB.
-            </p>
-          )}
-          {selectedWantedAsset === 'TAPROOT_BNB' && (
-            <p className="text-sm text-indigo-700 mb-3">
-              Rule: poster generates invoice, locks BNB, then publishes invoice. Accepter continues after invoice appears.
-            </p>
-          )}
-
-          {!isSelectedAccepted && (
-            <p className="text-sm text-amber-700 mb-3">
-              This intention is still open. Accept it first to unlock invoice and lock steps.
-            </p>
-          )}
-
-          <button
-            onClick={handleGenerateInvoice}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={!canGenerateInvoice}
-          >
-            Generate Lightning Invoice
-          </button>
-          {!!generateInvoiceDisabledReason && (
-            <p className="text-xs text-gray-600 mt-2">{generateInvoiceDisabledReason}</p>
-          )}
-
-          {pendingInvoiceForSelected && (
-            <p className="text-xs text-amber-700 mt-2">
-              Invoice is local only. It will be published automatically after successful BNB lock.
-            </p>
-          )}
-
-          {effectiveInvoicePaymentRequest && (
-            <div className="mt-4 p-4 bg-green-50 rounded-md">
-              <p className="font-semibold text-green-800">Current invoice:</p>
-              <p className="break-all text-sm text-green-700">{effectiveInvoicePaymentRequest}</p>
-            </div>
-          )}
-        </div>
+          <div className="w-full max-w-2xl mt-4 flex items-center gap-2">
+            <input
+              id="self-accept"
+              type="checkbox"
+              checked={allowSelfAccept}
+              onChange={(e) => setAllowSelfAccept(e.target.checked)}
+            />
+            <label htmlFor="self-accept" className="text-sm text-gray-700">
+              Test mode: allow accepting my own intention
+            </label>
+          </div>
+        </>
       )}
 
-      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-2xl mt-8">
-        <h2 className="text-2xl font-semibold text-gray-700 mb-4">BNB Lock Step</h2>
-        <p className="text-sm text-gray-700 mb-2">
-          Lock BNB after invoice generation. Invoice is published to Nostr only after this step succeeds.
-        </p>
-        <button
-          onClick={initiateBNBSwap}
-          className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-          disabled={!isConnected || !canLockBnb}
-        >
-          Lock BNB on BSC
-        </button>
-        {!!lockBnbDisabledReason && (
-          <p className="text-xs text-gray-600 mt-2">{lockBnbDisabledReason}</p>
-        )}
+      {activeTab === 'market' && (
+        <SwapIntentionsList
+          setSelectedSwapIntention={setSelectedSwapIntention}
+          selectedSwapIntention={selectedSwapIntention}
+          setInvoicePaymentRequest={setInvoicePaymentRequest}
+          setInvoicePaymentHash={setInvoicePaymentHash}
+          setErrorMessage={setErrorMessage}
+          setSwapStatus={setSwapStatus}
+          evmAddress={address}
+          allowSelfAccept={allowSelfAccept}
+        />
+      )}
 
-        {invoicePreimage && (
-          <div className="mt-4 p-4 bg-green-50 rounded-md">
-            <p className="font-semibold">Preimage:</p>
-            <p className="break-all text-sm text-green-800">{invoicePreimage}</p>
-          </div>
-        )}
-      </div>
+      {activeTab === 'execute' && (
+        <>
+          {selectedSwapIntention ? (
+            <>
+              <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-2xl mt-2">
+                <h2 className="text-2xl font-semibold text-gray-700 mb-4">Next Step</h2>
+
+                <p className="text-sm text-gray-700 mb-1">
+                  Selected intention wants: <strong>{selectedWantedAsset || 'BNB'}</strong>
+                </p>
+                <p className="text-sm text-gray-700 mb-2">
+                  Current status: <strong>{selectedSwapIntention.status}</strong>
+                </p>
+
+                {selectedWantedAsset === 'BNB' && (
+                  <p className="text-sm text-indigo-700 mb-3">
+                    Rule: accepter generates invoice, locks BNB, then publishes invoice. Poster pays invoice and claims BNB.
+                  </p>
+                )}
+                {selectedWantedAsset === 'TAPROOT_BNB' && (
+                  <p className="text-sm text-indigo-700 mb-3">
+                    Rule: poster generates invoice, locks BNB, then publishes invoice. Accepter continues after invoice appears.
+                  </p>
+                )}
+
+                {!isSelectedAccepted && (
+                  <p className="text-sm text-amber-700 mb-3">
+                    This intention is still open. Accept it first in Market tab.
+                  </p>
+                )}
+
+                <button
+                  onClick={handleGenerateInvoice}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!canGenerateInvoice}
+                >
+                  Generate Lightning Invoice
+                </button>
+                {!!generateInvoiceDisabledReason && (
+                  <p className="text-xs text-gray-600 mt-2">{generateInvoiceDisabledReason}</p>
+                )}
+
+                {pendingInvoiceForSelected && (
+                  <p className="text-xs text-amber-700 mt-2">
+                    Invoice is local only. It will be published automatically after successful BNB lock.
+                  </p>
+                )}
+
+                {effectiveInvoicePaymentRequest && (
+                  <div className="mt-4 p-4 bg-green-50 rounded-md">
+                    <p className="font-semibold text-green-800">Current invoice:</p>
+                    <p className="break-all text-sm text-green-700">{effectiveInvoicePaymentRequest}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-2xl mt-8">
+                <h2 className="text-2xl font-semibold text-gray-700 mb-4">BNB Lock Step</h2>
+                <p className="text-sm text-gray-700 mb-2">
+                  Lock BNB after invoice generation. Invoice is published to Nostr only after this step succeeds.
+                </p>
+                <button
+                  onClick={initiateBNBSwap}
+                  className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!isConnected || !canLockBnb}
+                >
+                  Lock BNB on BSC
+                </button>
+                {!!lockBnbDisabledReason && (
+                  <p className="text-xs text-gray-600 mt-2">{lockBnbDisabledReason}</p>
+                )}
+
+                {invoicePreimage && (
+                  <div className="mt-4 p-4 bg-green-50 rounded-md">
+                    <p className="font-semibold">Preimage:</p>
+                    <p className="break-all text-sm text-green-800">{invoicePreimage}</p>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-2xl mt-2">
+              <p className="text-gray-700">No intention selected yet. Go to Market tab and select one.</p>
+            </div>
+          )}
+        </>
+      )}
 
       <div className="text-lg font-semibold mt-8 p-4 bg-indigo-100 rounded-md text-indigo-800 w-full max-w-2xl">
         Current Swap Status: <span className="font-bold">{swapStatus}</span>
