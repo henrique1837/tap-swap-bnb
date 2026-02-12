@@ -7,17 +7,18 @@ function ConnectScreen({
   setPairingPhrase,
   lncPassword,
   setLncPassword,
-  isConnectingLNC, // This will be `lncStatus === 'Connecting'`
-  handleConnectLNCWithPairing, // Renamed prop
-  handleLoginLNCWithPassword,  // New prop
-  handleDisconnectLNC,         // New prop for 'Forget Session'
+  isConnectingLNC,
+  handleConnectLNCWithPairing,
+  handleLoginLNCWithPassword,
+  handleDisconnectLNC,
   connectionErrorLNC,
   isWeb3Connected,
   web3Address,
   web3ChainName,
   handleConnectWeb3,
   isWeb3Connecting,
-  lncIsPaired, // Updated prop name
+  lncIsPaired,
+  lncIsConnected,
 }) {
   const themeClass = darkMode ? 'dark bg-gray-900 text-white' : 'light bg-gray-100 text-gray-800';
 
@@ -41,70 +42,78 @@ function ConnectScreen({
           <h2 className="text-2xl font-semibold text-gray-700 dark:text-gray-200 mb-4">Lightning Node Connect (LNC)</h2>
           {isConnectingLNC ? (
             <p className="text-blue-600 dark:text-blue-400">Connecting to LNC...</p>
+          ) : lncIsConnected ? ( // <--- This check should now correctly trigger after successful login
+            <>
+              <p className="text-green-600 dark:text-green-400 font-semibold mb-4 flex items-center">
+                LNC Node is Currently Connected! <span className="ml-2 text-xl">✅</span>
+              </p>
+              <button
+                onClick={handleDisconnectLNC}
+                className="w-full py-3 px-4 rounded-md text-white font-medium transition duration-300 bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600"
+              >
+                Disconnect LNC Session
+              </button>
+            </>
+          ) : lncIsPaired ? (
+            <>
+              <p className="text-gray-700 dark:text-gray-300 mb-2">
+                A saved LNC session was found. Enter your password to reconnect:
+              </p>
+              <input
+                type="password"
+                value={lncPassword}
+                onChange={setLncPassword}
+                placeholder="Enter LNC Password"
+                className="w-full p-3 mb-4 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+                disabled={isConnectingLNC}
+              />
+              <button
+                onClick={onLncConnect}
+                className={`w-full py-3 px-4 rounded-md text-white font-medium transition duration-300 ${
+                  lncPassword && !isConnectingLNC
+                    ? 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600'
+                    : 'bg-blue-400 dark:bg-blue-600 opacity-70 cursor-not-allowed'
+                }`}
+                disabled={!lncPassword || isConnectingLNC}
+              >
+                {isConnectingLNC ? 'Logging In...' : 'Login to LNC Node'}
+              </button>
+              <button
+                onClick={handleDisconnectLNC} // This button's text is crucial here
+                className="mt-3 w-full py-2 px-4 rounded-md text-gray-700 dark:text-gray-300 font-medium transition duration-300 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600"
+              >
+                Forget Session & Pair New Node
+              </button>
+            </>
           ) : (
             <>
-              {lncIsPaired ? (
-                <>
-                  <p className="text-gray-700 dark:text-gray-300 mb-2">
-                    A saved LNC session was found. Enter your password to reconnect:
-                  </p>
-                  <input
-                    type="password"
-                    value={lncPassword}
-                    onChange={setLncPassword}
-                    placeholder="Enter LNC Password"
-                    className="w-full p-3 mb-4 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
-                    disabled={isConnectingLNC}
-                  />
-                  <button
-                    onClick={onLncConnect}
-                    className={`w-full py-3 px-4 rounded-md text-white font-medium transition duration-300 ${
-                      lncPassword && !isConnectingLNC
-                        ? 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600'
-                        : 'bg-blue-400 dark:bg-blue-600 opacity-70 cursor-not-allowed'
-                    }`}
-                    disabled={!lncPassword || isConnectingLNC}
-                  >
-                    {isConnectingLNC ? 'Logging In...' : 'Login to LNC Node'}
-                  </button>
-                  <button
-                    onClick={handleDisconnectLNC}
-                    className="mt-3 w-full py-2 px-4 rounded-md text-gray-700 dark:text-gray-300 font-medium transition duration-300 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600"
-                  >
-                    Forget Session & Pair New Node
-                  </button>
-                </>
-              ) : (
-                <>
-                  <input
-                    type="text"
-                    value={pairingPhrase}
-                    onChange={setPairingPhrase}
-                    placeholder="Enter LNC Pairing Phrase"
-                    className="w-full p-3 mb-4 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
-                    disabled={isConnectingLNC}
-                  />
-                  <input
-                    type="password"
-                    value={lncPassword}
-                    onChange={setLncPassword}
-                    placeholder="Choose a password for this LNC session"
-                    className="w-full p-3 mb-4 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
-                    disabled={isConnectingLNC}
-                  />
-                  <button
-                    onClick={onLncConnect}
-                    className={`w-full py-3 px-4 rounded-md text-white font-medium transition duration-300 ${
-                      pairingPhrase && lncPassword && !isConnectingLNC
-                        ? 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600'
-                        : 'bg-blue-400 dark:bg-blue-600 opacity-70 cursor-not-allowed'
-                    }`}
-                    disabled={!pairingPhrase || !lncPassword || isConnectingLNC}
-                  >
-                    {isConnectingLNC ? 'Connecting...' : 'Connect LNC Node'}
-                  </button>
-                </>
-              )}
+              <input
+                type="text"
+                value={pairingPhrase}
+                onChange={setPairingPhrase}
+                placeholder="Enter LNC Pairing Phrase"
+                className="w-full p-3 mb-4 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+                disabled={isConnectingLNC}
+              />
+              <input
+                type="password"
+                value={lncPassword}
+                onChange={setLncPassword}
+                placeholder="Choose a password for this LNC session"
+                className="w-full p-3 mb-4 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+                disabled={isConnectingLNC}
+              />
+              <button
+                onClick={onLncConnect}
+                className={`w-full py-3 px-4 rounded-md text-white font-medium transition duration-300 ${
+                  pairingPhrase && lncPassword && !isConnectingLNC
+                    ? 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600'
+                    : 'bg-blue-400 dark:bg-blue-600 opacity-70 cursor-not-allowed'
+                }`}
+                disabled={!pairingPhrase || !lncPassword || isConnectingLNC}
+              >
+                {isConnectingLNC ? 'Connecting...' : 'Connect LNC Node'}
+              </button>
             </>
           )}
           {connectionErrorLNC && (
@@ -136,13 +145,13 @@ function ConnectScreen({
 
         {/* Overall Status */}
         <div className="mt-6 text-center text-lg font-medium text-gray-700 dark:text-gray-300">
-          {(!isConnectingLNC && !isWeb3Connecting && !isWeb3Connected && !lncIsPaired) && (
+          {(!isConnectingLNC && !isWeb3Connecting && !isWeb3Connected && !lncIsPaired && !lncIsConnected) && (
             <p>Please connect both your Lightning Node and Web3 Wallet to continue.</p>
           )}
-          {isWeb3Connected && (!lncIsPaired && !pairingPhrase) && <p>Web3 Wallet Connected. Now connect LNC.</p>}
-          {!isWeb3Connected && (lncIsPaired || pairingPhrase) && <p>LNC connection ready. Now connect Web3 Wallet.</p>}
-          {isWeb3Connected && (lncIsPaired || pairingPhrase) && isConnectingLNC && <p>Connecting LNC...</p>}
-          {web3Address && (lncIsPaired || pairingPhrase) && !isConnectingLNC && <p>All set! You can proceed.</p>}
+          {isWeb3Connected && (!lncIsPaired && !pairingPhrase && !lncIsConnected) && <p>Web3 Wallet Connected. Now connect LNC.</p>}
+          {!isWeb3Connected && (lncIsPaired || pairingPhrase || lncIsConnected) && <p>LNC connection ready. Now connect Web3 Wallet.</p>}
+          {isWeb3Connected && (lncIsPaired || pairingPhrase || lncIsConnected) && isConnectingLNC && <p>Connecting LNC...</p>}
+          {web3Address && (lncIsPaired || pairingPhrase || lncIsConnected) && !isConnectingLNC && !isWeb3Connecting && <p>All set! You can proceed.</p>}
         </div>
       </div>
     </div>

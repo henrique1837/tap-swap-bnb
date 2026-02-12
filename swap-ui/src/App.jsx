@@ -260,6 +260,7 @@ function App() {
         handleConnectWeb3={() => connect({ connector: injected() })}
         isWeb3Connecting={wagmiIsConnecting} // <--- CHANGED TO THIS
         lncIsPaired={lncIsPaired} // Pass the isPaired state
+        lncIsConnected={lncIsConnected}
       />
     );
   }
