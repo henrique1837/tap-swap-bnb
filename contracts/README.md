@@ -10,6 +10,15 @@ EVM-side smart contracts for the atomic swap prototype.
 
 https://testnet.bscscan.com/address/0x63189b272c97d148a609ed6c3b99075abf0c1693#code
 
+### Lightning network regtest setup
+ 
+  - Install https://lightningpolar.com/
+  - Run polar and create two litd (lightning terminal daemon) nodes (alice and bob) alongside a bitcoind node
+  - Mint some Taproot Assets (TA) to the alice node
+  - Open a channel between alice and bob with the Taproot Asset (TA)
+  - Run the tests, start with LightningTapd.test.ts to see if everything works fine
+  - Test the atomic swap with AtomicSwapTaproot.ts
+  
 ### Purpose
 
 It secures the BNB side of the swap by enforcing:

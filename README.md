@@ -6,6 +6,10 @@ Atomic swap prototype between:
 
 Nostr is used as the communication layer for swap intentions and coordination events.
 
+## Contract Deployed
+
+https://testnet.bscscan.com/address/0x63189b272c97d148a609ed6c3b99075abf0c1693
+
 ## Intent
 
 This project demonstrates a practical cross-domain swap UX where participants:
@@ -33,3 +37,13 @@ This project demonstrates a practical cross-domain swap UX where participants:
 
 - UI details: `swap-ui/README.md`
 - Contract details: `contracts/README.md`
+
+### Lightning network regtest setup
+ 
+  - Install https://lightningpolar.com/
+  - Run polar and create two litd (lightning terminal daemon) nodes (alice and bob) alongside a bitcoind node
+  - Mint some Taproot Assets (TA) to the alice node
+  - Open a channel between alice and bob with the Taproot Asset (TA)
+  - Run the tests, start with LightningTapd.test.ts to see if everything works fine
+  - Test the atomic swap with AtomicSwapTaproot.ts
+  
