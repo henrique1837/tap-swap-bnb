@@ -29,7 +29,7 @@ const TAPROOT_ASSET_ID = 'YOUR_TAPROOT_ASSET_ID_HEX';
 function App() {
   // --- Wagmi Hooks for Wallet Interaction ---
   const { address, isConnected } = useAccount();
-  const { connect } = useConnect();
+  const { connect, isConnecting: wagmiIsConnecting } = useConnect(); // Added isConnecting and renamed to avoid conflict
   const currentChainId = useChainId();
   const configuredChains = useChains();
   const currentChain = configuredChains.find(c => c.id === currentChainId);
@@ -258,7 +258,7 @@ function App() {
         web3Address={address}
         web3ChainName={currentChain?.name}
         handleConnectWeb3={() => connect({ connector: injected() })}
-        isWeb3Connecting={!isConnected && lncStatus !== 'Connecting'}
+        isWeb3Connecting={wagmiIsConnecting} // <--- CHANGED TO THIS
         lncIsPaired={lncIsPaired} // Pass the isPaired state
       />
     );
