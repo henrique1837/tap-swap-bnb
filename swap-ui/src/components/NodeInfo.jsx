@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTaprootAssets } from '../hooks/useTaprootAssets';
 
 function NodeInfo({ lncClient, isConnected }) {
     const [nodeInfo, setNodeInfo] = useState(null);
@@ -6,7 +7,8 @@ function NodeInfo({ lncClient, isConnected }) {
     const [balanceInfo, setBalanceInfo] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [isExpanded, setIsExpanded] = useState(true);
+
+    const { assets: taprootAssets, isLoading: isLoadingAssets, isTapdAvailable } = useTaprootAssets(lncClient, isConnected);
 
     const fetchNodeInfo = useCallback(async () => {
         if (!lncClient?.lnd?.lightning || !isConnected) {
@@ -64,67 +66,67 @@ function NodeInfo({ lncClient, isConnected }) {
     };
 
     if (!isConnected) {
-        return null;
+        return (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-700 font-semibold">⚠️ LNC Not Connected</p>
+                <p className="text-sm text-red-600 mt-2">
+                    Connect to your Lightning Node via LNC to view node information.
+                </p>
+            </div>
+        );
     }
 
     return (
-        <div className="bg-gradient-to-br from-purple-50 to-indigo-50 p-8 rounded-lg shadow-lg w-full max-w-2xl mb-8 border border-purple-100">
-            <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-semibold text-gray-800 flex items-center gap-2">
-                    <span className="text-2xl">⚡</span>
-                    Lightning Node Info
-                </h2>
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={fetchNodeInfo}
-                        disabled={isLoading}
-                        className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-md transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                    >
-                        <span className={isLoading ? 'animate-spin' : ''}>↻</span>
-                        Refresh
-                    </button>
-                    <button
-                        onClick={() => setIsExpanded(!isExpanded)}
-                        className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm rounded-md transition duration-200"
-                    >
-                        {isExpanded ? '▼' : '▶'}
-                    </button>
-                </div>
+        <div className="space-y-6">
+            {/* Refresh Button */}
+            <div className="flex justify-end">
+                <button
+                    onClick={fetchNodeInfo}
+                    disabled={isLoading}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                    <span className={isLoading ? 'animate-spin' : ''}>↻</span>
+                    Refresh
+                </button>
             </div>
 
             {error && (
-                <div className="bg-red-100 border border-red-300 text-red-700 px-4 py-2 rounded-md mb-4 text-sm">
+                <div className="bg-red-100 border border-red-300 text-red-700 px-4 py-3 rounded-lg text-sm">
                     {error}
                 </div>
             )}
 
             {isLoading && !nodeInfo ? (
-                <div className="space-y-3">
-                    <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4"></div>
-                    <div className="h-4 bg-gray-200 rounded animate-pulse w-1/2"></div>
-                    <div className="h-4 bg-gray-200 rounded animate-pulse w-2/3"></div>
+                <div className="space-y-4">
+                    <div className="h-24 bg-gray-200 rounded-lg animate-pulse"></div>
+                    <div className="h-24 bg-gray-200 rounded-lg animate-pulse"></div>
+                    <div className="h-24 bg-gray-200 rounded-lg animate-pulse"></div>
                 </div>
-            ) : nodeInfo && isExpanded ? (
+            ) : nodeInfo ? (
                 <div className="space-y-4">
                     {/* Node Identity */}
-                    <div className="bg-white bg-opacity-60 backdrop-blur-sm p-4 rounded-md border border-purple-100">
-                        <h3 className="text-sm font-semibold text-purple-700 mb-2 uppercase tracking-wide">Node Identity</h3>
-                        <div className="space-y-2">
+                    <div className="bg-gradient-to-br from-indigo-50 to-purple-50 p-5 rounded-lg border border-indigo-200">
+                        <h3 className="text-sm font-semibold text-indigo-700 mb-3 uppercase tracking-wide flex items-center gap-2">
+                            <span>⚡</span> Node Identity
+                        </h3>
+                        <div className="space-y-3">
                             <div>
-                                <span className="text-xs text-gray-500 block">Alias</span>
-                                <span className="text-lg font-bold text-gray-800">{nodeInfo.alias || 'Unknown'}</span>
+                                <span className="text-xs text-gray-500 block mb-1">Alias</span>
+                                <span className="text-xl font-bold text-gray-800">{nodeInfo.alias || 'Unknown'}</span>
                             </div>
                             <div>
-                                <span className="text-xs text-gray-500 block">Public Key</span>
-                                <span className="text-xs font-mono text-gray-700 break-all">{nodeInfo.identityPubkey}</span>
+                                <span className="text-xs text-gray-500 block mb-1">Public Key</span>
+                                <span className="text-xs font-mono text-gray-700 break-all bg-white p-2 rounded border border-gray-300 block">
+                                    {nodeInfo.identityPubkey}
+                                </span>
                             </div>
-                            <div className="flex gap-4">
+                            <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <span className="text-xs text-gray-500 block">Version</span>
+                                    <span className="text-xs text-gray-500 block mb-1">Version</span>
                                     <span className="text-sm font-semibold text-gray-700">{nodeInfo.version}</span>
                                 </div>
                                 <div>
-                                    <span className="text-xs text-gray-500 block">Network</span>
+                                    <span className="text-xs text-gray-500 block mb-1">Network</span>
                                     <span className="text-sm font-semibold text-gray-700 capitalize">
                                         {nodeInfo.chains?.[0]?.network || 'Unknown'}
                                     </span>
@@ -134,71 +136,56 @@ function NodeInfo({ lncClient, isConnected }) {
                     </div>
 
                     {/* Sync Status */}
-                    <div className="bg-white bg-opacity-60 backdrop-blur-sm p-4 rounded-md border border-purple-100">
-                        <h3 className="text-sm font-semibold text-purple-700 mb-2 uppercase tracking-wide">Sync Status</h3>
-                        <div className="flex items-center gap-2">
-                            <div className={`w-3 h-3 rounded-full ${nodeInfo.syncedToChain ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`}></div>
-                            <span className="text-sm font-semibold text-gray-700">
+                    <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-5 rounded-lg border border-green-200">
+                        <h3 className="text-sm font-semibold text-green-700 mb-3 uppercase tracking-wide flex items-center gap-2">
+                            <span>🔄</span> Sync Status
+                        </h3>
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className={`w-4 h-4 rounded-full ${nodeInfo.syncedToChain ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`}></div>
+                            <span className="text-lg font-semibold text-gray-800">
                                 {nodeInfo.syncedToChain ? 'Fully Synced' : 'Syncing...'}
                             </span>
                             {nodeInfo.syncedToGraph && (
-                                <span className="text-xs text-gray-500 ml-2">(Graph Synced)</span>
+                                <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded">(Graph Synced)</span>
                             )}
                         </div>
-                        <div className="mt-2 text-xs text-gray-600">
+                        <div className="text-sm text-gray-600 bg-white p-2 rounded">
                             Block Height: <span className="font-mono font-semibold">{nodeInfo.blockHeight?.toLocaleString()}</span>
                         </div>
                     </div>
 
-                    {/* Channel Information */}
-                    {channelInfo && (
-                        <div className="bg-white bg-opacity-60 backdrop-blur-sm p-4 rounded-md border border-purple-100">
-                            <h3 className="text-sm font-semibold text-purple-700 mb-2 uppercase tracking-wide">Channels</h3>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <span className="text-xs text-gray-500 block">Active Channels</span>
-                                    <span className="text-2xl font-bold text-indigo-600">{channelInfo.channels?.length || 0}</span>
-                                </div>
-                                <div>
-                                    <span className="text-xs text-gray-500 block">Total Capacity</span>
-                                    <span className="text-lg font-semibold text-gray-700">
-                                        {formatSats(channelInfo.channels?.reduce((sum, ch) => sum + parseInt(ch.capacity || 0), 0))} sats
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Balance Information */}
+                    {/* Balances */}
                     {balanceInfo && (
-                        <div className="bg-white bg-opacity-60 backdrop-blur-sm p-4 rounded-md border border-purple-100">
-                            <h3 className="text-sm font-semibold text-purple-700 mb-2 uppercase tracking-wide">Balances</h3>
-                            <div className="space-y-3">
-                                <div>
-                                    <span className="text-xs text-gray-500 block">Lightning Balance</span>
+                        <div className="bg-gradient-to-br from-yellow-50 to-orange-50 p-5 rounded-lg border border-yellow-200">
+                            <h3 className="text-sm font-semibold text-orange-700 mb-3 uppercase tracking-wide flex items-center gap-2">
+                                <span>💰</span> Balances
+                            </h3>
+                            <div className="space-y-4">
+                                <div className="bg-white p-4 rounded-lg border border-yellow-300">
+                                    <span className="text-xs text-gray-500 block mb-1">Lightning Balance</span>
                                     <div className="flex items-baseline gap-2">
-                                        <span className="text-xl font-bold text-yellow-600">
+                                        <span className="text-2xl font-bold text-yellow-600">
                                             {formatSats(balanceInfo.channel?.balance)}
                                         </span>
                                         <span className="text-sm text-gray-600">sats</span>
-                                        <span className="text-xs text-gray-500 ml-2">
-                                            ({formatBTC(balanceInfo.channel?.balance)} BTC)
-                                        </span>
                                     </div>
+                                    <span className="text-xs text-gray-500">
+                                        {formatBTC(balanceInfo.channel?.balance)} BTC
+                                    </span>
                                 </div>
-                                <div>
-                                    <span className="text-xs text-gray-500 block">On-Chain Balance</span>
+                                <div className="bg-white p-4 rounded-lg border border-orange-300">
+                                    <span className="text-xs text-gray-500 block mb-1">On-Chain Balance</span>
                                     <div className="flex items-baseline gap-2">
-                                        <span className="text-xl font-bold text-orange-600">
+                                        <span className="text-2xl font-bold text-orange-600">
                                             {formatSats(balanceInfo.onChain?.confirmedBalance)}
                                         </span>
                                         <span className="text-sm text-gray-600">sats</span>
-                                        <span className="text-xs text-gray-500 ml-2">
-                                            ({formatBTC(balanceInfo.onChain?.confirmedBalance)} BTC)
-                                        </span>
                                     </div>
+                                    <span className="text-xs text-gray-500">
+                                        {formatBTC(balanceInfo.onChain?.confirmedBalance)} BTC
+                                    </span>
                                     {balanceInfo.onChain?.unconfirmedBalance && parseInt(balanceInfo.onChain.unconfirmedBalance) > 0 && (
-                                        <div className="text-xs text-gray-500 mt-1">
+                                        <div className="text-xs text-gray-500 mt-2 bg-yellow-100 p-2 rounded">
                                             Unconfirmed: {formatSats(balanceInfo.onChain.unconfirmedBalance)} sats
                                         </div>
                                     )}
@@ -207,27 +194,91 @@ function NodeInfo({ lncClient, isConnected }) {
                         </div>
                     )}
 
+                    {/* Taproot Assets (On-Chain) */}
+                    {isTapdAvailable && (
+                        <div className="bg-gradient-to-br from-amber-50 to-orange-50 p-5 rounded-lg border border-amber-200">
+                            <h3 className="text-sm font-semibold text-amber-700 mb-3 uppercase tracking-wide flex items-center gap-2">
+                                <span>🪙</span> Taproot Assets (On-Chain)
+                            </h3>
+
+                            {isLoadingAssets ? (
+                                <div className="space-y-2">
+                                    <div className="h-12 bg-white rounded animate-pulse"></div>
+                                    <div className="h-12 bg-white rounded animate-pulse"></div>
+                                </div>
+                            ) : taprootAssets.length === 0 ? (
+                                <div className="bg-white p-4 rounded-lg border border-amber-300 text-center">
+                                    <p className="text-sm text-gray-500">No Taproot Assets found</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {taprootAssets.map((asset) => (
+                                        <div key={asset.assetId} className="bg-white p-3 rounded-lg border border-amber-200 shadow-sm flex items-center justify-between">
+                                            <div>
+                                                <p className="font-bold text-gray-800">{asset.name}</p>
+                                                <p className="text-xs text-gray-500 font-mono break-all line-clamp-1" title={asset.assetId}>
+                                                    ID: {asset.assetId.slice(0, 8)}...{asset.assetId.slice(-8)}
+                                                </p>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-xs text-gray-500 block">Balance</span>
+                                                <span className="font-bold text-orange-600">{parseInt(asset.amount).toLocaleString()}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                                <p className="text-xs text-blue-800">
+                                    <span className="font-semibold">ℹ️ Channels Note:</span> Channels with Taproot Assets are not available via LNC at this time.
+                                    In the future, we will update this to show asset channel balances.
+                                    Currently showing on-chain asset balances.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Channels */}
+                    {channelInfo && (
+                        <div className="bg-gradient-to-br from-blue-50 to-cyan-50 p-5 rounded-lg border border-blue-200">
+                            <h3 className="text-sm font-semibold text-blue-700 mb-3 uppercase tracking-wide flex items-center gap-2">
+                                <span>🔗</span> Channels
+                            </h3>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-white p-4 rounded-lg border border-blue-300 text-center">
+                                    <span className="text-xs text-gray-500 block mb-1">Active Channels</span>
+                                    <span className="text-3xl font-bold text-blue-600">{channelInfo.channels?.length || 0}</span>
+                                </div>
+                                <div className="bg-white p-4 rounded-lg border border-cyan-300 text-center">
+                                    <span className="text-xs text-gray-500 block mb-1">Total Capacity</span>
+                                    <span className="text-lg font-semibold text-cyan-700">
+                                        {formatSats(channelInfo.channels?.reduce((sum, ch) => sum + parseInt(ch.capacity || 0), 0))}
+                                    </span>
+                                    <span className="text-xs text-gray-500 block">sats</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Quick Stats */}
-                    <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-4 rounded-md text-white">
+                    <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-5 rounded-lg text-white shadow-lg">
+                        <h3 className="text-sm font-semibold mb-3 uppercase tracking-wide opacity-90">Quick Stats</h3>
                         <div className="grid grid-cols-3 gap-4 text-center">
                             <div>
-                                <div className="text-2xl font-bold">{nodeInfo.numActiveChannels || 0}</div>
-                                <div className="text-xs opacity-90">Active</div>
+                                <div className="text-3xl font-bold">{nodeInfo.numActiveChannels || 0}</div>
+                                <div className="text-xs opacity-80 mt-1">Active</div>
                             </div>
                             <div>
-                                <div className="text-2xl font-bold">{nodeInfo.numPendingChannels || 0}</div>
-                                <div className="text-xs opacity-90">Pending</div>
+                                <div className="text-3xl font-bold">{nodeInfo.numPendingChannels || 0}</div>
+                                <div className="text-xs opacity-80 mt-1">Pending</div>
                             </div>
                             <div>
-                                <div className="text-2xl font-bold">{nodeInfo.numPeers || 0}</div>
-                                <div className="text-xs opacity-90">Peers</div>
+                                <div className="text-3xl font-bold">{nodeInfo.numPeers || 0}</div>
+                                <div className="text-xs opacity-80 mt-1">Peers</div>
                             </div>
                         </div>
                     </div>
-                </div>
-            ) : !isExpanded ? (
-                <div className="text-sm text-gray-600">
-                    <span className="font-semibold">{nodeInfo?.alias || 'Node'}</span> - {nodeInfo?.numActiveChannels || 0} channels
                 </div>
             ) : null}
         </div>
