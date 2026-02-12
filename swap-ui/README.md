@@ -1,16 +1,78 @@
-# React + Vite
+# swap-ui
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Frontend application for coordinating atomic swaps between Taproot Assets (Lightning) and BNB (EVM), using Nostr for intention communication.
 
-Currently, two official plugins are available:
+## What This UI Does
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+The UI connects:
+- LNC (Lightning node access)
+- EVM wallet (for BNB lock transactions)
+- Nostr (for intention, acceptance, and invoice coordination events)
 
-## React Compiler
+The app uses a step-based UX (`Create`, `Market`, `Execute`) and auto-advances tabs based on progress.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Main UX Flow
 
-## Expanding the ESLint configuration
+1. `Create`
+- User chooses swap intent (`BNB` or `TAPROOT_BNB`) and publishes intention to Nostr.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+2. `Market`
+- Users browse open intentions and accept one.
+- Test mode can allow self-accept for local testing.
+
+3. `Execute`
+- Correct role generates Lightning invoice.
+- Correct role locks BNB on-chain.
+- Invoice details are published to Nostr after successful lock.
+- Counterparty proceeds to payment/claim side.
+
+## Role Rules
+
+- If intention wants `BNB`:
+  - Accepter generates invoice
+  - Accepter locks BNB
+  - Poster waits, then pays invoice and claims BNB path
+
+- If intention wants `TAPROOT_BNB`:
+  - Poster generates invoice
+  - Poster locks BNB
+  - Accepter proceeds after invoice is published
+
+## Key UI Files
+
+- `src/App.jsx`: Main orchestration and tab UX.
+- `src/contexts/NostrContext.jsx`: Nostr event publish/fetch logic.
+- `src/components/SwapIntentionsList.jsx`: Intention list and acceptance UI.
+- `src/components/CreateSwapIntention.jsx`: New intention publishing UI.
+- `src/components/ConnectScreen.jsx`: LNC + wallet connection screen.
+
+## Run
+
+```bash
+npm install
+npm run dev
+```
+
+## Screenshot Placeholders
+
+### 1) Connect Screen
+
+![Connect Screen](./docs/images/connect-screen.png)
+
+### 2) Create Intention (Create Tab)
+
+![Create Tab](./docs/images/create-tab.png)
+
+### 3) Market Intentions (Market Tab)
+
+![Market Tab](./docs/images/market-tab.png)
+
+### 4) Execute Step (Invoice + Lock)
+
+![Execute Tab](./docs/images/execute-tab.png)
+
+### 5) Success / Invoice Published
+
+![Success State](./docs/images/success-state.png)
+
+
