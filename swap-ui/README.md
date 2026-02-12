@@ -47,7 +47,7 @@ The app uses a step-based UX (`Create`, `Market`, `Lock`, `Claim`) and isolates 
 
 - `src/App.jsx`: Main orchestration, state management, and tabbed workflow.
 - `src/contexts/NostrContext.jsx`: Nostr event publishing, fetching, and coordination logic.
-- `src/components/ClaimableIntentionsList.jsx`: [NEW] Specialized list for filtering and selecting claimable swaps.
+- `src/components/ClaimableIntentionsList.jsx`: Specialized list for filtering and selecting claimable swaps.
 - `src/components/SwapIntentionsList.jsx`: Market list for browsing and accepting open swap intentions.
 - `src/components/CreateSwapIntention.jsx`: UI for defining and publishing new swap intentions.
 - `src/components/ConnectScreen.jsx`: LNC + EVM Wallet connection and authentication screen.
