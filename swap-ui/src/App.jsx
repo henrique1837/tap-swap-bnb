@@ -7,7 +7,7 @@ import { parseEther } from 'viem';
 import { hexToBytes } from 'ethereum-cryptography/utils';
 import { Buffer } from 'buffer';
 
-import AtomicSwapBNBArtifact from '../../contracts/artifacts/contracts/AtomicSwapBNB.sol/AtomicSwapBNB.json';
+import AtomicSwapBNBArtifact from '../artifacts/contracts/AtomicSwapBNB.sol/AtomicSwapBNB.json';
 import ConnectScreen from './components/ConnectScreen';
 
 import { NostrProvider, useNostr } from './contexts/NostrContext';
@@ -16,6 +16,7 @@ import NodeInfo from './components/NodeInfo';
 import TaprootAssetSelector from './components/TaprootAssetSelector';
 import CreateSwapIntention from './components/CreateSwapIntention';
 import SwapIntentionsList from './components/SwapIntentionsList';
+import ClaimableIntentionsList from './components/ClaimableIntentionsList';
 import Header from './components/Header';
 import Modal from './components/Modal';
 import { decode } from 'light-bolt11-decoder';
@@ -91,6 +92,7 @@ function AppContent() {
   const [allowSelfAccept, setAllowSelfAccept] = useState(true);
 
   const [activeTab, setActiveTab] = useState('create');
+  const [claimedSwapDTags, setClaimedSwapDTags] = useState([]);
 
   // Modal states
   const [isNostrModalOpen, setIsNostrModalOpen] = useState(false);
@@ -178,25 +180,17 @@ function AppContent() {
             : 'For wants Taproot BNB, only poster locks BNB.')
           : '';
 
-  // Auto move between tabs based on progress.
-  useEffect(() => {
-    if (!selectedSwapIntention) {
-      setActiveTab('create');
-      return;
-    }
-
-    if (!isSelectedAccepted) {
-      setActiveTab('market');
-      return;
-    }
-
-    setActiveTab('execute');
-  }, [selectedSwapIntention, isSelectedAccepted]);
+  // Auto move between tabs removed to prevent conflicts with Claim tab.
+  // Tab switching is now handled explicitly in onSelect handlers.
 
   const tabClass = (key) => `px-4 py-2 rounded-md text-sm font-medium transition ${activeTab === key
     ? 'bg-indigo-600 text-white shadow'
     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
     }`;
+
+  // ...
+
+
 
   const handleLncPairingPhraseChange = (e) => setLncPairingPhrase(e.target.value);
   const handleLncPasswordChange = (e) => setLncPassword(e.target.value);
@@ -250,7 +244,20 @@ function AppContent() {
     setSwapStatus('Verifying BNB Lock on BSC...');
 
     try {
-      const hash = selectedSwapIntention.paymentHash.startsWith('0x') ? selectedSwapIntention.paymentHash : `0x${selectedSwapIntention.paymentHash}`;
+      let hash = selectedSwapIntention.paymentHash;
+      // Handle Base64 hash (44 chars) which might come from Nostr/LNC
+      // 32 bytes = 44 chars in Base64, 64 chars in Hex.
+      const raw = hash.startsWith('0x') ? hash.slice(2) : hash;
+
+      if (raw.length === 44) {
+        hash = `0x${Buffer.from(raw, 'base64').toString('hex')}`;
+      } else if (raw.length === 88) {
+        // Handle Hex-encoded ASCII of Base64 (Double encoded)
+        const ascii = Buffer.from(raw, 'hex').toString('utf8');
+        hash = `0x${Buffer.from(ascii, 'base64').toString('hex')}`;
+      } else if (!hash.startsWith('0x')) {
+        hash = `0x${hash}`;
+      }
 
       const swapData = await publicClient.readContract({
         address: contractAddress,
@@ -357,6 +364,7 @@ function AppContent() {
       await publicClient.waitForTransactionReceipt({ hash });
 
       setSwapStatus('BNB Claimed Successfully! Swap Completed.');
+      setClaimedSwapDTags(prev => [...prev, selectedSwapIntention.dTag]);
     } catch (err) {
       console.error('Error claiming BNB:', err);
       setErrorMessage(`Failed to claim BNB: ${err.message || String(err)}`);
@@ -461,6 +469,46 @@ function AppContent() {
 
     setErrorMessage('');
     setActiveTab('execute');
+  };
+
+  const handleClaimerGenerateInvoice = async () => {
+    if (!canGenerateInvoice) {
+      setErrorMessage('Role mismatch: You cannot generate invoice for this swap.');
+      return;
+    }
+    setSwapStatus('Generating Lightning Invoice via LNC...');
+    const invoice = await createInvoice();
+    if (!invoice) return;
+
+    setSwapStatus('Publishing Invoice to Nostr...');
+    try {
+      await publishInvoiceForIntention(selectedSwapIntention, invoice, address);
+      setInvoicePaymentRequest(invoice.paymentRequest);
+      setInvoicePaymentHash(invoice.paymentHash);
+      setSwapStatus('Invoice Published! Now wait for Counterparty to lock BNB.');
+      // Refresh list to update status? We might need to manually trigger fetch or wait for subscription.
+    } catch (err) {
+      setErrorMessage(`Failed to publish invoice: ${err.message}`);
+    }
+  };
+
+  const handleClaimerSubmitInvoice = async () => {
+    if (!manualInvoice || !effectiveInvoicePaymentHash) {
+      setErrorMessage('Invalid invoice provided.');
+      return;
+    }
+    setSwapStatus('Publishing Manual Invoice to Nostr...');
+    try {
+      const invoiceData = {
+        paymentRequest: manualInvoice,
+        paymentHash: effectiveInvoicePaymentHash
+      };
+      await publishInvoiceForIntention(selectedSwapIntention, invoiceData, address);
+      setSwapStatus('Invoice Published! Now wait for Counterparty to lock BNB.');
+      setManualInvoice(''); // Clear input
+    } catch (err) {
+      setErrorMessage(`Failed to publish invoice: ${err.message}`);
+    }
   };
 
   const handlePublishSwapIntention = async () => {
@@ -612,6 +660,7 @@ function AppContent() {
       setInvoicePaymentRequest('');
       setInvoicePaymentHash(null);
       setPendingInvoice(null);
+      setManualInvoice('');
       return;
     }
 
@@ -697,7 +746,8 @@ function AppContent() {
             <div className="flex gap-2 border-b pb-3">
               <button className={tabClass('create')} onClick={() => setActiveTab('create')}>1. Create</button>
               <button className={tabClass('market')} onClick={() => setActiveTab('market')}>2. Market</button>
-              <button className={tabClass('execute')} onClick={() => setActiveTab('execute')}>3. Execute</button>
+              <button className={tabClass('execute')} onClick={() => setActiveTab('execute')}>3. Lock (Execute)</button>
+              <button className={tabClass('claim')} onClick={() => setActiveTab('claim')}>4. Claim</button>
             </div>
           </div>
 
@@ -729,7 +779,10 @@ function AppContent() {
 
           {activeTab === 'market' && (
             <SwapIntentionsList
-              setSelectedSwapIntention={setSelectedSwapIntention}
+              setSelectedSwapIntention={(intention) => {
+                setSelectedSwapIntention(intention);
+                setActiveTab('execute');
+              }}
               selectedSwapIntention={selectedSwapIntention}
               setInvoicePaymentRequest={setInvoicePaymentRequest}
               setInvoicePaymentHash={setInvoicePaymentHash}
@@ -892,12 +945,79 @@ function AppContent() {
                     </>
                   )}
 
-                  {/* CLAIMER ROLE UI */}
-                  {isClaimerRoleMatch && (
+
+                </>
+              ) : (
+                <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-2xl mt-2">
+                  <p className="text-gray-700">No intention selected yet. Go to Market tab and select one.</p>
+                </div>
+              )}
+            </>
+          )}
+
+          {activeTab === 'claim' && (
+            <>
+              <ClaimableIntentionsList
+                setSelectedSwapIntention={setSelectedSwapIntention}
+                selectedSwapIntention={selectedSwapIntention}
+                setErrorMessage={setErrorMessage}
+                setSwapStatus={setSwapStatus}
+                nostrPubkey={nostrPubkey}
+                claimedSwapDTags={claimedSwapDTags}
+              />
+
+              {selectedSwapIntention && (
+                <>
+                  {isClaimerRoleMatch ? (
                     <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-2xl mt-8 border-l-4 border-purple-500">
                       <h2 className="text-2xl font-semibold text-gray-800 mb-4">Counterparty Actions</h2>
 
-                      {/* Step 1: Verify Lock */}
+                      {/* Step 0: Provide Payment Invoice */}
+                      {selectedSwapIntention.status === 'accepted' && (
+                        <div className="mb-6 p-4 rounded-lg border border-indigo-200 bg-indigo-50">
+                          <h3 className="text-lg font-medium text-gray-700 mb-2">0. Provide Payment Invoice</h3>
+                          <p className="text-sm text-gray-600 mb-2">Provide a Lightning invoice for <strong>{selectedSwapIntention.amountSats} sats</strong>.</p>
+
+                          {/* Option A: Manual Input */}
+                          <div className="mb-4">
+                            <label className="block text-xs text-gray-500 mb-1">Manual Invoice (lnbc...)</label>
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={manualInvoice}
+                                onChange={(e) => setManualInvoice(e.target.value)}
+                                placeholder="lnbc..."
+                                className="flex-1 p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-purple-500 outline-none"
+                              />
+                              <button
+                                onClick={handleClaimerSubmitInvoice}
+                                disabled={!manualInvoice || !effectiveInvoicePaymentHash}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md disabled:opacity-50 transition duration-200"
+                              >
+                                Submit
+                              </button>
+                            </div>
+                            {manualInvoice && effectiveInvoicePaymentHash && (
+                              <p className="text-xs text-green-600 mt-1">Valid invoice detected: {effectiveInvoicePaymentHash.substring(0, 10)}...</p>
+                            )}
+                          </div>
+
+                          {/* Option B: Generate with LNC */}
+                          {isLncApiReady() && (
+                            <div className="border-t border-indigo-200 pt-4 mt-4">
+                              <p className="text-sm font-medium text-gray-700 mb-2">Or generate automatically via LNC:</p>
+                              <button
+                                onClick={handleClaimerGenerateInvoice}
+                                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md transition duration-200 w-full"
+                              >
+                                Generate & Publish Invoice (Auto)
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Step 1: Verify BNB Lock */}
                       <div className="mb-6">
                         <h3 className="text-lg font-medium text-gray-700 mb-2">1. Verify BNB Lock</h3>
                         <p className="text-sm text-gray-600 mb-2">Check if the BNB has been locked on the contract.</p>
@@ -971,16 +1091,15 @@ function AppContent() {
                         )}
                       </div>
                     </div>
+                  ) : (
+                    <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-2xl mt-2">
+                      <p className="text-gray-700">Argument mismatch: Selected intention is not claimable by you (role mismatch).</p>
+                    </div>
                   )}
                 </>
-              ) : (
-                <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-2xl mt-2">
-                  <p className="text-gray-700">No intention selected yet. Go to Market tab and select one.</p>
-                </div>
               )}
             </>
-          )
-          }
+          )}
 
           <div className="text-lg font-semibold mt-8 p-4 bg-indigo-100 rounded-md text-indigo-800 w-full max-w-2xl">
             Current Swap Status: <span className="font-bold">{swapStatus}</span>
