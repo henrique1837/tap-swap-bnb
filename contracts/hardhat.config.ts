@@ -1,7 +1,8 @@
 // hardhat.config.ts (Note: using .ts as you're importing 'defineConfig')
 import hardhatToolboxViemPlugin from "@nomicfoundation/hardhat-toolbox-viem";
 import { configVariable, defineConfig } from "hardhat/config";
-
+import dotenv from "dotenv";
+dotenv.config();
 export default defineConfig({
   plugins: [hardhatToolboxViemPlugin],
   solidity: {

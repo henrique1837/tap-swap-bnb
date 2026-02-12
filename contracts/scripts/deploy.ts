@@ -1,56 +1,55 @@
-// scripts/deploy.ts
-import { HardhatRuntimeEnvironment } from "hardhat/types";
-import { run } from "hardhat"; // Import run for verification
+// scripts/deploy.ts (using viem)
+import { network } from "hardhat";
 
-async function main(hre: HardhatRuntimeEnvironment) {
-  const { ethers, network } = hre;
-  console.log("Deploying AtomicSwapBNB contract...");
+async function main() {
+  // This is the CRUCIAL line from Hardhat v3 docs:
+  // It connects to the network and returns the `viem` client and `networkName`.
+  const { viem, networkName } = await network.connect();
+  const client = await viem.getPublicClient(); // Get a public client for waiting for transactions
 
-  // Get the ContractFactory for AtomicSwapBNB
-  const AtomicSwapBNB = await ethers.getContractFactory("AtomicSwapBNB");
+  console.log(`Deploying AtomicSwapBNB to ${networkName}...`);
 
-  // Deploy the contract.
-  // Our contract constructor doesn't take any arguments, so we just call deploy().
-  const atomicSwapBNB = await AtomicSwapBNB.deploy();
+  // Deploy the contract using viem's deployContract helper
+  const atomicSwapBNB = await viem.deployContract("AtomicSwapBNB");
 
-  // Wait for the deployment transaction to be mined
-  await atomicSwapBNB.waitForDeployment();
+  console.log("AtomicSwapBNB address:", atomicSwapBNB.address);
 
-  const contractAddress = await atomicSwapBNB.getAddress();
-
-  console.log(`AtomicSwapBNB deployed to: ${contractAddress}`);
-  console.log(`Transaction hash: ${atomicSwapBNB.deploymentTransaction()?.hash}`);
-
-  // Optional: Verify the contract on BscScan
-  // This step is important for users to see the source code on block explorers.
-  const networksToVerify = ["bnbt", "bnbm"];
-  if (networksToVerify.includes(network.name)) {
+  // Optional: Verification step (adapted for viem's client)
+  const networksToVerify = ["bnbt", "bnbm", "sepolia"];
+  if (networksToVerify.includes(networkName)) {
     console.log("Waiting for a few block confirmations before verification...");
-    // Give BscScan some time to index the transaction
-    await new Promise(resolve => setTimeout(resolve, 30000)); // Wait 30 seconds
+    // Wait for the transaction to be mined and indexed by the explorer
+    await client.waitForTransactionReceipt({ hash: atomicSwapBNB.deploymentTransaction?.hash, confirmations: 5 }); // Wait 5 confirmations
 
-    console.log("Verifying contract on BscScan...");
+    console.log("Verifying contract on the explorer...");
     try {
+      // The `run` function still needs to be accessed from `hre` for verification tasks.
+      // This is a slight deviation from the pure 'network.connect()' pattern for deployment,
+      // but is how Hardhat's verify task is typically invoked.
+      // We'll import `hre` for this specific case.
+      const { run } = await import("hardhat"); // Dynamic import for `run`
+
       await run("verify:verify", {
-        address: contractAddress,
-        constructorArguments: [], // Our constructor takes no arguments
+        address: atomicSwapBNB.address,
+        constructorArguments: [], // No constructor arguments for AtomicSwapBNB
+        // contract: "contracts/AtomicSwapBNB.sol:AtomicSwapBNB", // Optional
       });
       console.log("Contract verified successfully!");
-    } catch (error: any) { // Use 'any' for error type if you prefer, or a more specific type if known
-      if (error.message.toLowerCase().includes("already verified")) {
+    } catch (error: any) {
+      if (error.message.toLowerCase().includes("already verified") || error.message.toLowerCase().includes("contract source code already verified")) {
         console.log("Contract is already verified!");
       } else {
         console.error("Error verifying contract:", error);
       }
     }
   } else {
-    console.log(`Contract not deployed to a public network (${network.name}), skipping verification.`);
+    console.log(`Contract not deployed to a public network (${networkName}), skipping verification.`);
   }
+
+  console.log("Deployment successful!");
 }
 
-// We recommend this pattern to be able to use async/await everywhere
-// and properly handle errors.
-main(require("hardhat")).catch((error) => { // Pass hardhat runtime environment
+main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

@@ -6,6 +6,10 @@ EVM-side smart contracts for the atomic swap prototype.
 
 `AtomicSwapBNB` is a Hash Time-Locked Contract (HTLC) for locking BNB and resolving swaps with a hashlock/preimage flow.
 
+### Contract address
+
+https://testnet.bscscan.com/address/0x63189b272c97d148a609ed6c3b99075abf0c1693#code
+
 ### Purpose
 
 It secures the BNB side of the swap by enforcing:
