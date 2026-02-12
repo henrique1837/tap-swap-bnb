@@ -2,14 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAccount, useWalletClient, usePublicClient, useConnect, useChainId, useChains } from 'wagmi';
 import { injected } from 'wagmi/connectors';
 import { useLNC } from './hooks/useLNC';
-// IMPORTANT: Import taprpc and wstrpcrpc for service configuration
-import LNC, { taprpc, wstrpcrpc } from '@lightninglabs/lnc-web';
 import { bytesToHex, parseEther } from 'viem';
 import { sha256 } from 'ethereum-cryptography/sha256';
 import { hexToBytes } from 'ethereum-cryptography/utils';
 import { Buffer } from 'buffer';
 
 import AtomicSwapBNBArtifact from '../../contracts/artifacts/contracts/AtomicSwapBNB.sol/AtomicSwapBNB.json';
+import ConnectScreen from './components/ConnectScreen'; // Import the ConnectScreen component
 
 // --- Helper Functions ---
 const base64ToHex = (base64) => "0x" + Buffer.from(base64, 'base64').toString('hex');
@@ -27,117 +26,32 @@ const ATOMIC_SWAP_BNB_CONTRACT_ADDRESS = '0xYourDeployedContractAddressHere';
 const TAPROOT_ASSET_ID = 'YOUR_TAPROOT_ASSET_ID_HEX';
 
 
-// --- New ConnectScreen Component ---
-function ConnectScreen({
-  darkMode,
-  toggleDarkMode,
-  pairingPhrase,
-  setPairingPhrase,
-  isConnectingLNC,
-  handleConnectLNC,
-  connectionErrorLNC,
-  isWeb3Connected,
-  web3Address,
-  web3ChainName,
-  handleConnectWeb3,
-  isWeb3Connecting,
-}) {
-  const themeClass = darkMode ? 'dark bg-gray-900 text-white' : 'light bg-gray-100 text-gray-800';
-
-  return (
-    <div className={`min-h-screen flex items-center justify-center p-4 ${themeClass}`}>
-      <div className={`bg-white dark:bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-md`}>
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Connect to Atomic Swap App</h1>
-          {/* You can re-add your DarkModeToggle here if needed */}
-          {/* <DarkModeToggle darkMode={darkMode} toggleDarkMode={toggleDarkMode} /> */}
-        </div>
-
-        {/* LNC Connection Section */}
-        <div className="mb-8 p-6 border border-gray-200 dark:border-gray-700 rounded-lg">
-          <h2 className="text-2xl font-semibold text-gray-700 dark:text-gray-200 mb-4">Lightning Node Connect (LNC)</h2>
-          {isConnectingLNC ? (
-            <p className="text-blue-600 dark:text-blue-400">Connecting to LNC...</p>
-          ) : (
-            <>
-              <input
-                type="text"
-                value={pairingPhrase}
-                onChange={setPairingPhrase}
-                placeholder="Enter LNC Pairing Phrase"
-                className="w-full p-3 mb-4 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
-                disabled={isConnectingLNC}
-              />
-              <button
-                onClick={handleConnectLNC}
-                className={`w-full py-3 px-4 rounded-md text-white font-medium transition duration-300 ${
-                  pairingPhrase && !isConnectingLNC
-                    ? 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600'
-                    : 'bg-blue-400 dark:bg-blue-600 opacity-70 cursor-not-allowed'
-                }`}
-                disabled={!pairingPhrase || isConnectingLNC}
-              >
-                {isConnectingLNC ? 'Connecting...' : 'Connect LNC Node'}
-              </button>
-            </>
-          )}
-          {connectionErrorLNC && (
-            <div className="text-red-500 text-sm mt-3">{connectionErrorLNC}</div>
-          )}
-        </div>
-
-        {/* Web3 Wallet Connection Section */}
-        <div className="mb-8 p-6 border border-gray-200 dark:border-gray-700 rounded-lg">
-          <h2 className="text-2xl font-semibold text-gray-700 dark:text-gray-200 mb-4">Web3 Wallet (EVM)</h2>
-          {isWeb3Connected ? (
-            <div className="text-green-600 dark:text-green-400">
-              Connected: {web3Address} ({web3ChainName || 'Unknown Chain'})
-            </div>
-          ) : (
-            <button
-              onClick={handleConnectWeb3}
-              className={`w-full py-3 px-4 rounded-md text-white font-medium transition duration-300 ${
-                isWeb3Connecting
-                  ? 'bg-gray-500 opacity-70 cursor-not-allowed'
-                  : 'bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600'
-              }`}
-              disabled={isWeb3Connecting}
-            >
-              {isWeb3Connecting ? 'Connecting...' : 'Connect Web3 Wallet (MetaMask, etc.)'}
-            </button>
-          )}
-        </div>
-
-        {/* Overall Status */}
-        <div className="mt-6 text-center text-lg font-medium text-gray-700 dark:text-gray-300">
-          {(!isConnectingLNC && !isWeb3Connecting && !isWeb3Connected) && (
-            <p>Please connect both your Lightning Node and Web3 Wallet to continue.</p>
-          )}
-          {isWeb3Connected && !pairingPhrase && <p>Web3 Wallet Connected. Now connect LNC.</p>}
-          {!isWeb3Connected && pairingPhrase && <p>LNC Pairing Phrase entered. Now connect Web3 Wallet.</p>}
-          {isWeb3Connected && !pairingPhrase && isConnectingLNC && <p>Connecting LNC...</p>}
-          {web3Address && pairingPhrase && !isConnectingLNC && <p>All set! You can proceed.</p>}
-
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
 function App() {
   // --- Wagmi Hooks for Wallet Interaction ---
   const { address, isConnected } = useAccount();
   const { connect } = useConnect();
   const currentChainId = useChainId();
   const configuredChains = useChains();
-  const { lncClient, status: lncStatus, connect: connectLNC, error: lncError } = useLNC();  const currentChain = configuredChains.find(c => c.id === currentChainId);
+  const currentChain = configuredChains.find(c => c.id === currentChainId);
 
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
 
   // --- LNC State for Lightning Node Connection ---
+  const { 
+    lnc: lncClient, 
+    status: lncStatus, 
+    connectWithPairing, // Renamed from 'connect'
+    loginWithPassword,  // New function from hook
+    disconnect: disconnectLNC,
+    error: lncError,
+    isReady: lncIsConnected, // Using lnc.isConnected
+    isPaired: lncIsPaired,   // Using lnc.credentials.isPaired
+  } = useLNC();
+
   const [lncPairingPhrase, setLncPairingPhrase] = useState('');
+  const [lncPassword, setLncPassword] = useState('');
+
 
   // --- Swap Specific State ---
   const [invoicePaymentRequest, setInvoicePaymentRequest] = useState('');
@@ -153,24 +67,37 @@ function App() {
     setLncPairingPhrase(e.target.value);
   };
 
-  const handleConnectLNC = async () => {
-    if (!lncPairingPhrase) {
-      setErrorMessage('Please enter your LNC Pairing Phrase.');
-      return;
-    }
+  const handleLncPasswordChange = (e) => {
+    setLncPassword(e.target.value);
+  };
+
+  const handleConnectLNCWithPairing = async (pairingPhrase, password) => {
     setErrorMessage('');
     try {
-      await connectLNC(lncPairingPhrase);
-      setLncPairingPhrase(''); 
+      await connectWithPairing(pairingPhrase, password);
+      setLncPairingPhrase(''); // Clear after successful pairing
+      setLncPassword('');     // Clear after successful pairing
     } catch (err) {
-      // Error is already handled by hook, but you can add local logging here
+      // Error handled by hook, but display local message if needed
+      setErrorMessage(err.message || "Failed to connect to LNC node.");
     }
   };
 
+  const handleLoginLNCWithPassword = async (password) => {
+    setErrorMessage('');
+    try {
+      await loginWithPassword(password);
+      setLncPassword(''); // Clear password after successful login
+    } catch (err) {
+      setErrorMessage(err.message || "Failed to login to LNC node.");
+    }
+  };
+
+
   // --- Utility to check if LNC is ready ---
   const isLncApiReady = useCallback(() => {
-    return !!lncClient && lncClient.isReady;
-  }, [lncClient]);
+    return lncIsConnected; // Directly use the isConnected from the hook
+  }, [lncIsConnected]);
 
 
   // --- Swap Step 1: Create Lightning Invoice ---
@@ -266,7 +193,7 @@ function App() {
     setSwapStatus('Polling for LN invoice settlement...');
     const intervalId = setInterval(async () => {
         try {
-            if (!lncClient || !lncClient.isReady) {
+            if (!lncClient || !lncIsConnected) { // Use lncIsConnected from hook
                 clearInterval(intervalId);
                 console.warn("LNC client became null or not ready during polling, stopping interval.");
                 return;
@@ -289,12 +216,12 @@ function App() {
     }, 5000);
 
     return () => clearInterval(intervalId);
-  }, [lncClient, isLncApiReady, invoicePaymentHash]);
+  }, [lncClient, lncIsConnected, invoicePaymentHash]); // Dependency change
 
 
-  // This useEffect will run when `isLncApiReady` changes
+  // This useEffect will run when `lncIsConnected` changes
   useEffect(() => {
-    if (isLncApiReady()) {
+    if (lncIsConnected) {
       console.log('LNC API ready for use.');
     } else {
       console.log('LNC API not ready.');
@@ -303,26 +230,36 @@ function App() {
       setInvoicePreimage(null);
       setSwapStatus('Idle');
     }
-  }, [isLncApiReady]);
+  }, [lncIsConnected]);
+
+  useEffect(() => {
+    if (lncError) {
+        setErrorMessage(lncError);
+    }
+  }, [lncError]);
 
 
-
-  // Render ConnectScreen if LNC is not ready OR Web3 wallet is not connected
-  if (!lncClient?.isReady || !isConnected) {
+  // Render ConnectScreen if LNC is not connected OR Web3 wallet is not connected
+  if (!lncIsConnected || !isConnected) {
     return (
       <ConnectScreen
-        darkMode={false} // Adjust as per your DarkModeToggle logic in App.jsx or ConnectScreen
-        toggleDarkMode={() => {}} // Placeholder, pass actual toggle if available
+        darkMode={false} 
+        toggleDarkMode={() => {}} 
         pairingPhrase={lncPairingPhrase}
         setPairingPhrase={handleLncPairingPhraseChange}
-        isConnectingLNC={lncStatus === 'Connecting...'}
-        handleConnectLNC={handleConnectLNC}
-        connectionErrorLNC={errorMessage}
+        lncPassword={lncPassword}
+        setLncPassword={handleLncPasswordChange}
+        isConnectingLNC={lncStatus === 'Connecting'}
+        handleConnectLNCWithPairing={handleConnectLNCWithPairing}
+        handleLoginLNCWithPassword={handleLoginLNCWithPassword}
+        handleDisconnectLNC={disconnectLNC} // Pass the disconnect function
+        connectionErrorLNC={errorMessage || lncError}
         isWeb3Connected={isConnected}
         web3Address={address}
         web3ChainName={currentChain?.name}
-        handleConnectWeb3={() => connect({ connector: injected() })} // Connect Web3 on button click
-        isWeb3Connecting={!isConnected && lncStatus !== 'Connecting...'} // Simple way to infer if web3 is attempting to connect
+        handleConnectWeb3={() => connect({ connector: injected() })}
+        isWeb3Connecting={!isConnected && lncStatus !== 'Connecting'}
+        lncIsPaired={lncIsPaired} // Pass the isPaired state
       />
     );
   }
@@ -346,6 +283,12 @@ function App() {
         <div className="flex flex-col gap-4 mb-4">
           <p className="text-green-600 font-semibold">LNC Connected!</p>
           <p className="text-sm text-gray-600 mt-2">Status: {lncStatus}</p>
+          <button
+            onClick={disconnectLNC}
+            className="mt-4 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded transition duration-300"
+          >
+            Disconnect LNC
+          </button>
         </div>
       </div>
 
