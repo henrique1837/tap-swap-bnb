@@ -11,6 +11,7 @@ import ConnectScreen from './components/ConnectScreen';
 
 import { NostrProvider, useNostr } from './contexts/NostrContext';
 import NostrIdentityDisplay from './components/NostrIdentityDisplay';
+import NodeInfo from './components/NodeInfo';
 import CreateSwapIntention from './components/CreateSwapIntention';
 import SwapIntentionsList from './components/SwapIntentionsList';
 
@@ -137,11 +138,10 @@ function AppContent() {
     setActiveTab('execute');
   }, [selectedSwapIntention, isSelectedAccepted]);
 
-  const tabClass = (key) => `px-4 py-2 rounded-md text-sm font-medium transition ${
-    activeTab === key
-      ? 'bg-indigo-600 text-white shadow'
-      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-  }`;
+  const tabClass = (key) => `px-4 py-2 rounded-md text-sm font-medium transition ${activeTab === key
+    ? 'bg-indigo-600 text-white shadow'
+    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+    }`;
 
   const handleLncPairingPhraseChange = (e) => setLncPairingPhrase(e.target.value);
   const handleLncPasswordChange = (e) => setLncPassword(e.target.value);
@@ -411,7 +411,7 @@ function AppContent() {
     return (
       <ConnectScreen
         darkMode={false}
-        toggleDarkMode={() => {}}
+        toggleDarkMode={() => { }}
         pairingPhrase={lncPairingPhrase}
         setPairingPhrase={handleLncPairingPhraseChange}
         lncPassword={lncPassword}
@@ -444,6 +444,8 @@ function AppContent() {
       )}
 
       <NostrIdentityDisplay />
+
+      <NodeInfo lncClient={lncClient} isConnected={lncIsConnected} />
 
       <div className="w-full max-w-2xl mb-4">
         <div className="flex gap-2 border-b pb-3">
