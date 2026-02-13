@@ -62,6 +62,8 @@ const ClaimableIntentionCard = ({ intention, onSelect, isSelected }) => {
 function ClaimableIntentionsList({
     setSelectedSwapIntention,
     selectedSwapIntention,
+    setInvoicePaymentRequest,
+    setInvoicePaymentHash,
     setErrorMessage,
     setSwapStatus,
     nostrPubkey,
@@ -144,7 +146,9 @@ function ClaimableIntentionsList({
                         intention={intention}
                         onSelect={(intent) => {
                             setSelectedSwapIntention(intent);
-                            setSwapStatus(`Selected swap ${intent.dTag.substring(0, 8)}... for claiming.`);
+                            if (intent.paymentRequest) setInvoicePaymentRequest(intent.paymentRequest);
+                            if (intent.paymentHash) setInvoicePaymentHash(intent.paymentHash);
+                            setSwapStatus(`Selected swap ${intent.dTag?.substring(0, 8)}... for claiming.`);
                         }}
                         isSelected={selectedSwapIntention?.dTag === intention.dTag}
                     />

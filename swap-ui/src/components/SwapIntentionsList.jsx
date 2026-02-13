@@ -110,8 +110,10 @@ function SwapIntentionsList({
 
   const handleSelectIntention = useCallback((intention) => {
     setSelectedSwapIntention(intention);
-    setInvoicePaymentRequest(intention.paymentRequest || '');
-    setInvoicePaymentHash(intention.paymentHash || null);
+    // Sticky updates: Only overwrite if new data is present. 
+    // This prevents stale Nostr data from clearing locally generated invoices.
+    if (intention.paymentRequest) setInvoicePaymentRequest(intention.paymentRequest);
+    if (intention.paymentHash) setInvoicePaymentHash(intention.paymentHash);
     setErrorMessage('');
     setSwapStatus(`Selected intention from ${nip19.npubEncode(intention.pubkey || intention.posterPubkey).substring(0, 10)}...`);
   }, [setSelectedSwapIntention, setInvoicePaymentRequest, setInvoicePaymentHash, setErrorMessage, setSwapStatus]);

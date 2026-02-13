@@ -243,23 +243,19 @@ export const NostrProvider = ({ children }) => {
     const invoiceMap = new Map();
 
     try {
-      const [intentionEvents, acceptEvents, invoiceEvents] = await Promise.all([
-        pool.querySync(RELAYS, {
-          kinds: [NOSTR_SWAP_INTENTION_KIND],
-          '#t': [NOSTR_SWAP_TOPIC],
-          limit: 300,
-        }),
-        pool.querySync(RELAYS, {
-          kinds: [NOSTR_SWAP_ACCEPT_KIND],
-          '#t': [NOSTR_SWAP_TOPIC],
-          limit: 300,
-        }),
-        pool.querySync(RELAYS, {
-          kinds: [NOSTR_SWAP_INVOICE_KIND],
-          '#t': [NOSTR_SWAP_TOPIC],
-          limit: 300,
-        }),
-      ]);
+      // Query all related kinds in one go for better relay consistency
+      const allEvents = await pool.querySync(RELAYS, {
+        kinds: [NOSTR_SWAP_INTENTION_KIND, NOSTR_SWAP_ACCEPT_KIND, NOSTR_SWAP_INVOICE_KIND],
+        '#t': [NOSTR_SWAP_TOPIC],
+        limit: 500,
+      });
+
+      // Sort events by creation time to ensure we process latest updates correctly
+      allEvents.sort((a, b) => a.created_at - b.created_at);
+
+      const intentionEvents = allEvents.filter(e => e.kind === NOSTR_SWAP_INTENTION_KIND);
+      const acceptEvents = allEvents.filter(e => e.kind === NOSTR_SWAP_ACCEPT_KIND);
+      const invoiceEvents = allEvents.filter(e => e.kind === NOSTR_SWAP_INVOICE_KIND);
 
       for (const event of intentionEvents) {
         try {
@@ -388,6 +384,7 @@ export const NostrProvider = ({ children }) => {
         isLoadingNostr,
         disconnectNostr,
         nostrPrivkey: privKey,
+        pool,
       }}
     >
       {children}

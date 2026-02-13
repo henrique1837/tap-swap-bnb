@@ -96,6 +96,39 @@ npm run dev
 
 ### 5) Success / Invoice Published
 
-![Success State](./docs/images/success-state.png)
+![Success State](./docs/images/bnb-tx-confirmed.png)
+
+### 6) Paying Invoice / Claim BNB
+
+  6.1 Select claimable order
+
+![Claim 1](./docs/images/select-claim.png)
+
+  6.2 Pay invoice
+
+![Claim 2](./docs/images/invoice-toPay.png)
+
+  6.3 Generating LNC session for Bob polar node to connect to lightning terminal 
+
+![Claim 3](./docs/images/bob-terminal.png)
+
+  6.4 Bob pays invoice
+
+![Claim 4](./docs/images/payingInvoice.png)  
+
+  6.5 Copy preimage
+
+![Claim 5](./docs/images/copyPreimage.png)  
+
+  6.6 Claim BNB
+
+![Claim 6](./docs/images/claim-bnb.png)  
+
+  6.7 BNB Claimed
+
+![Claim 7](./docs/images/bnb-tx-confirmed.png)  
+
+
+
 
 

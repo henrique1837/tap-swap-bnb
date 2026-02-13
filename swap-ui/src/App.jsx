@@ -10,7 +10,7 @@ import { Buffer } from 'buffer';
 import AtomicSwapBNBArtifact from '../artifacts/contracts/AtomicSwapBNB.sol/AtomicSwapBNB.json';
 import ConnectScreen from './components/ConnectScreen';
 
-import { NostrProvider, useNostr } from './contexts/NostrContext';
+import { NostrProvider, useNostr, NOSTR_SWAP_INVOICE_KIND, NOSTR_SWAP_INTENTION_KIND } from './contexts/NostrContext';
 import NostrIdentityDisplay from './components/NostrIdentityDisplay';
 import NodeInfo from './components/NodeInfo';
 import TaprootAssetSelector from './components/TaprootAssetSelector';
@@ -29,6 +29,15 @@ const SWAP_AMOUNT_BNB = parseEther('0.00015');
 const BNB_TIMELOCK_OFFSET = 3600;
 
 const ATOMIC_SWAP_BNB_CONTRACT_ADDRESS = '0x63189b272c97d148a609ed6c3b99075abf0c1693';
+
+const RELAYS = [
+  'wss://relay.damus.io',
+  'wss://relay.primal.net',
+  'wss://nos.lol',
+  'wss://relay.snort.social',
+];
+
+const extractTagValue = (tags, key) => tags.find((tag) => tag[0] === key)?.[1];
 
 // Taproot Assets Configuration
 const DEMO_MODE = true; // Set to false in production
@@ -76,9 +85,11 @@ function AppContent() {
     nostrPubkey,
     publishSwapIntention,
     publishInvoiceForIntention,
+    fetchSwapIntentions,
     deriveNostrKeysFromLNC,
     isLoadingNostr,
     nostrPrivkey,
+    pool,
   } = useNostr();
 
   const [errorMessage, setErrorMessage] = useState('');
@@ -114,6 +125,7 @@ function AppContent() {
   const [isPayingInvoice, setIsPayingInvoice] = useState(false);
   const [isClaimingBnb, setIsClaimingBnb] = useState(false);
   const [invoiceMethod, setInvoiceMethod] = useState('manual');
+  const [recoveryTxHash, setRecoveryTxHash] = useState('');
 
   // Set default method to LNC if it becomes available
   useEffect(() => {
@@ -172,8 +184,24 @@ function AppContent() {
     }
   }, [manualInvoice]);
 
-  const effectiveInvoicePaymentHash = manualInvoiceHash || (pendingInvoiceForSelected ? pendingInvoice.paymentHash : invoicePaymentHash);
-  const effectiveInvoicePaymentRequest = manualInvoice || (pendingInvoiceForSelected ? pendingInvoice.paymentRequest : invoicePaymentRequest);
+  const effectiveInvoicePaymentHash = useMemo(() => {
+    // Priority:
+    // 1. Manual input from user
+    // 2. Data already indexed on Nostr (if present in the selected intention)
+    // 3. Local session memory (invoicePaymentHash)
+    // 4. Pending local state (not yet published)
+    return manualInvoiceHash ||
+      selectedSwapIntention?.paymentHash ||
+      invoicePaymentHash ||
+      (pendingInvoiceForSelected ? pendingInvoice?.paymentHash : null);
+  }, [manualInvoiceHash, selectedSwapIntention, invoicePaymentHash, pendingInvoiceForSelected, pendingInvoice]);
+
+  const effectiveInvoicePaymentRequest = useMemo(() => {
+    return manualInvoice ||
+      selectedSwapIntention?.paymentRequest ||
+      invoicePaymentRequest ||
+      (pendingInvoiceForSelected ? pendingInvoice?.paymentRequest : '');
+  }, [manualInvoice, selectedSwapIntention, invoicePaymentRequest, pendingInvoiceForSelected, pendingInvoice]);
 
   const canGenerateInvoice = Boolean(selectedSwapIntention) && isSelectedAccepted && isPublisherRoleMatch;
   const canLockBnb = Boolean(selectedSwapIntention) && isSelectedAccepted && isLockerRoleMatch && Boolean(effectiveInvoicePaymentHash);
@@ -255,8 +283,35 @@ function AppContent() {
   }, [isLncApiReady, nostrPubkey, isLoadingNostr, deriveNostrKeysFromLNC, lncSignMessageForNostr]);
 
   const verifyBNBLock = async () => {
-    if (!selectedSwapIntention || !selectedSwapIntention.paymentHash) {
-      setErrorMessage('No payment hash to verify.');
+    let hashToVerify = effectiveInvoicePaymentHash;
+
+    // Emergency Recovery: If hash is missing, attempt to pull it from a provided Transaction Hash
+    if (!hashToVerify && recoveryTxHash) {
+      setSwapStatus('Recovering payment hash from Transaction...');
+      try {
+        const receipt = await publicClient.getTransactionReceipt({ hash: recoveryTxHash });
+        // The SwapInitiated event is usually the first/only log in this contract
+        // We'll look for the 'hashlock' in the logs
+        const swapInitiatedTopic = '0x3c6d334ba216fe7a5d16a0ad07a6b134fc9404d2317b59755e9e38b825a3bdbf'; // SwapInitiated
+        const log = receipt.logs.find(l => l.topics[0] === swapInitiatedTopic);
+
+        if (log) {
+          // hashlock is the first indexed param (topic[1])
+          hashToVerify = log.topics[1];
+          setInvoicePaymentHash(hashToVerify);
+          setSwapStatus('Payment hash recovered from blockchain! Verifying lock status...');
+        } else {
+          setErrorMessage('No swap initiation event found in this transaction.');
+          return;
+        }
+      } catch (err) {
+        setErrorMessage(`Recovery failed: ${err.message}`);
+        return;
+      }
+    }
+
+    if (!selectedSwapIntention || !hashToVerify) {
+      setErrorMessage('No payment hash found. Please wait for Nostr update or provide the Lock Transaction Hash below.');
       return;
     }
     setBnbLockVerified(false);
@@ -264,7 +319,7 @@ function AppContent() {
     setSwapStatus('Verifying BNB Lock on BSC...');
 
     try {
-      let hash = selectedSwapIntention.paymentHash;
+      let hash = hashToVerify;
       // Handle Base64 hash (44 chars) which might come from Nostr/LNC
       // 32 bytes = 44 chars in Base64, 64 chars in Hex.
       const raw = hash.startsWith('0x') ? hash.slice(2) : hash;
@@ -295,7 +350,60 @@ function AppContent() {
 
       if (amount > 0n && !isClaimed && !isRefunded) {
         setBnbLockVerified(true);
-        setSwapStatus('BNB Lock Verified! Contract holds funds. You can safely pay the invoice now.');
+        setSwapStatus('BNB Lock Verified on-chain! Syncing Nostr for invoice...');
+
+        // Auto-refresh Nostr data to pick up the published invoice
+        try {
+          setSwapStatus('BNB Lock Verified on-chain! Performing targeted Nostr scan for invoice...');
+
+          // Strategy: Query specifically for events related to this intention
+          const targetedEvents = await pool.querySync(RELAYS, {
+            kinds: [NOSTR_SWAP_INVOICE_KIND],
+            '#e': [selectedSwapIntention.id],
+            limit: 10,
+          });
+
+          let updatedIntention = null;
+          if (targetedEvents.length > 0) {
+            // Find latest invoice event
+            targetedEvents.sort((a, b) => b.created_at - a.created_at);
+            const latestInvoice = targetedEvents[0];
+            try {
+              const content = JSON.parse(latestInvoice.content || '{}');
+              updatedIntention = {
+                ...selectedSwapIntention,
+                status: 'invoice_ready',
+                paymentRequest: content.paymentRequest || '',
+                paymentHash: content.paymentHash || extractTagValue(latestInvoice.tags, 'h') || '',
+              };
+            } catch (e) {
+              console.error('Error parsing targeted invoice event:', e);
+            }
+          }
+
+          // Fallback to general fetch if targeted scan found nothing
+          if (!updatedIntention || !updatedIntention.paymentRequest) {
+            const latestIntentions = await fetchSwapIntentions();
+            updatedIntention = latestIntentions.find(i => i.dTag === selectedSwapIntention.dTag);
+          }
+
+          if (updatedIntention) {
+            setSelectedSwapIntention(updatedIntention);
+            if (updatedIntention.paymentRequest) {
+              setInvoicePaymentRequest(updatedIntention.paymentRequest);
+              setInvoicePaymentHash(updatedIntention.paymentHash);
+              setSwapStatus('Lock Verified and Invoice found! You can now pay.');
+            } else {
+              setSwapStatus('Lock Verified on BSC, but invoice still missing on Nostr. Try "Force Sync" or Manual Import.');
+            }
+          } else {
+            setSwapStatus('Lock Verified on BSC. (Nostr data not found yet)');
+          }
+        } catch (nostrErr) {
+          console.warn('Nostr targeted sync failed:', nostrErr);
+          setSwapStatus('Lock Verified on BSC. (Nostr sync failed)');
+        }
+        startInvoicePolling();
       } else {
         if (amount === 0n) setErrorMessage('BNB not locked yet (amount is 0).');
         else if (isClaimed) setErrorMessage('BNB already claimed.');
@@ -491,46 +599,6 @@ function AppContent() {
     setActiveTab('execute');
   };
 
-  const handleClaimerGenerateInvoice = async () => {
-    if (!canGenerateInvoice) {
-      setErrorMessage('Role mismatch: You cannot generate invoice for this swap.');
-      return;
-    }
-    setSwapStatus('Generating Lightning Invoice via LNC...');
-    const invoice = await createInvoice();
-    if (!invoice) return;
-
-    setSwapStatus('Publishing Invoice to Nostr...');
-    try {
-      await publishInvoiceForIntention(selectedSwapIntention, invoice, address);
-      setInvoicePaymentRequest(invoice.paymentRequest);
-      setInvoicePaymentHash(invoice.paymentHash);
-      setSwapStatus('Invoice Published! Now wait for Counterparty to lock BNB.');
-      // Refresh list to update status? We might need to manually trigger fetch or wait for subscription.
-    } catch (err) {
-      setErrorMessage(`Failed to publish invoice: ${err.message}`);
-    }
-  };
-
-  const handleClaimerSubmitInvoice = async () => {
-    if (!manualInvoice || !effectiveInvoicePaymentHash) {
-      setErrorMessage('Invalid invoice provided.');
-      return;
-    }
-    setSwapStatus('Publishing Manual Invoice to Nostr...');
-    try {
-      const invoiceData = {
-        paymentRequest: manualInvoice,
-        paymentHash: effectiveInvoicePaymentHash
-      };
-      await publishInvoiceForIntention(selectedSwapIntention, invoiceData, address);
-      setSwapStatus('Invoice Published! Now wait for Counterparty to lock BNB.');
-      setManualInvoice(''); // Clear input
-    } catch (err) {
-      setErrorMessage(`Failed to publish invoice: ${err.message}`);
-    }
-  };
-
   const handlePublishSwapIntention = async () => {
     if (!nostrPubkey) {
       setErrorMessage('Nostr identity not established. Please ensure LNC is connected.');
@@ -595,17 +663,23 @@ function AppContent() {
 
       await publicClient.waitForTransactionReceipt({ hash });
 
-      if (pendingInvoiceForSelected && pendingInvoice && selectedSwapIntention) {
+      const invoiceToPublish = pendingInvoiceForSelected ? pendingInvoice :
+        (manualInvoice && manualInvoiceHash === effectiveInvoicePaymentHash ? {
+          paymentRequest: manualInvoice,
+          paymentHash: manualInvoiceHash
+        } : null);
+
+      if (invoiceToPublish && selectedSwapIntention) {
         setSwapStatus('BNB locked. Publishing invoice to Nostr...');
-        await publishInvoiceForIntention(selectedSwapIntention, pendingInvoice, address || '');
+        await publishInvoiceForIntention(selectedSwapIntention, invoiceToPublish, address || '');
 
         setSelectedSwapIntention((prev) => {
           if (!prev) return prev;
           return {
             ...prev,
             status: 'invoice_ready',
-            paymentRequest: pendingInvoice.paymentRequest,
-            paymentHash: pendingInvoice.paymentHash,
+            paymentRequest: invoiceToPublish.paymentRequest,
+            paymentHash: invoiceToPublish.paymentHash,
           };
         });
 
@@ -815,7 +889,19 @@ function AppContent() {
             <SwapIntentionsList
               setSelectedSwapIntention={(intention) => {
                 setSelectedSwapIntention(intention);
-                setActiveTab('execute');
+                // Sync invoice state if already present on Nostr
+                if (intention.paymentRequest) setInvoicePaymentRequest(intention.paymentRequest);
+                if (intention.paymentHash) setInvoicePaymentHash(intention.paymentHash);
+
+                // Smart Tab Switching: Locker role goes to Execute, others to Claim
+                const posterPubkey = intention.posterPubkey || intention.pubkey;
+                const isPoster = nostrPubkey === posterPubkey;
+                const isAccepter = intention.acceptedByPubkey === nostrPubkey;
+                const wantedAsset = intention.wantedAsset || 'BNB';
+                const roleForLocker = wantedAsset === 'BNB' ? 'accepter' : 'poster';
+                const isLocker = (roleForLocker === 'poster' && isPoster) || (roleForLocker === 'accepter' && isAccepter);
+
+                setActiveTab(isLocker ? 'execute' : 'claim');
               }}
               selectedSwapIntention={selectedSwapIntention}
               setInvoicePaymentRequest={setInvoicePaymentRequest}
@@ -1017,6 +1103,8 @@ function AppContent() {
               <ClaimableIntentionsList
                 setSelectedSwapIntention={setSelectedSwapIntention}
                 selectedSwapIntention={selectedSwapIntention}
+                setInvoicePaymentRequest={setInvoicePaymentRequest}
+                setInvoicePaymentHash={setInvoicePaymentHash}
                 setErrorMessage={setErrorMessage}
                 setSwapStatus={setSwapStatus}
                 nostrPubkey={nostrPubkey}
@@ -1027,149 +1115,164 @@ function AppContent() {
                 <>
                   {isClaimerRoleMatch ? (
                     <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-2xl mt-8 border-l-4 border-purple-500">
-                      <h2 className="text-2xl font-semibold text-gray-800 mb-4">Counterparty Actions</h2>
+                      <div className="flex items-center justify-between mb-6">
+                        <h2 className="text-2xl font-semibold text-gray-800">Your Action: Claim BNB</h2>
+                        <span className="px-3 py-1 bg-purple-100 text-purple-700 text-xs font-bold rounded-full uppercase tracking-wider">
+                          Role: Claimer
+                        </span>
+                      </div>
 
-                      {/* Step 0: Provide Payment Invoice */}
-                      {selectedSwapIntention.status === 'accepted' && (
-                        <div className="mb-8 p-6 rounded-xl border border-indigo-100 bg-indigo-50/50 shadow-sm">
-                          <h3 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
-                            <span>0️⃣</span> Provide Payment Invoice
-                          </h3>
-                          <p className="text-sm text-gray-600 mb-6">
-                            Provide a Lightning invoice for <strong className="text-indigo-700">{selectedSwapIntention.amountSats} sats</strong> to continue.
-                          </p>
 
-                          <div className="flex p-1 bg-white/50 backdrop-blur-sm rounded-lg mb-6 border border-indigo-100">
+
+                      {/* Step 1: Verify BNB Lock */}
+                      <div className="mb-8 p-6 rounded-xl border border-slate-200 bg-white shadow-sm">
+                        <h3 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2">
+                          <span>1️⃣</span> Verify BNB Lock
+                        </h3>
+                        <p className="text-sm text-slate-600 mb-4">
+                          Check if the counterparty has locked the BNB on the contract.
+                        </p>
+
+                        <div className="flex flex-col gap-4">
+                          <div className="flex items-center gap-3">
                             <button
-                              onClick={() => setInvoiceMethod('lnc')}
-                              disabled={!lncIsConnected}
-                              className={`flex-1 py-2 text-sm font-medium rounded-md transition ${invoiceMethod === 'lnc'
-                                ? 'bg-white text-indigo-600 shadow-sm'
-                                : 'text-gray-500 hover:text-gray-700'
-                                } ${!lncIsConnected ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              onClick={verifyBNBLock}
+                              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-2.5 rounded-lg transition duration-200 shadow-md flex items-center gap-2"
                             >
-                              LNC (Auto)
+                              <span>🔍</span> Verify Lock
                             </button>
-                            <button
-                              onClick={() => setInvoiceMethod('manual')}
-                              className={`flex-1 py-2 text-sm font-medium rounded-md transition ${invoiceMethod === 'manual'
-                                ? 'bg-white text-indigo-600 shadow-sm'
-                                : 'text-gray-500 hover:text-gray-700'
-                                }`}
-                            >
-                              Manual Paste
-                            </button>
+                            {bnbLockVerified && (
+                              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full text-sm font-bold border border-emerald-100 animate-in fade-in zoom-in duration-300">
+                                <span>✅</span> Verified
+                              </div>
+                            )}
                           </div>
 
-                          {invoiceMethod === 'lnc' ? (
-                            <div className="space-y-4">
-                              <p className="text-xs text-indigo-600 mb-2">Generate and publish an invoice automatically using your connected LNC node.</p>
-                              <button
-                                onClick={handleClaimerGenerateInvoice}
-                                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 shadow-md"
-                              >
-                                Generate & Publish (LNC)
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="space-y-4">
-                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Manual Invoice (lnbc...)</label>
+                          {/* Recovery Section */}
+                          {!effectiveInvoicePaymentHash && (
+                            <div className="mt-2 p-4 bg-amber-50 rounded-lg border border-amber-200 border-dashed">
+                              <p className="text-xs font-bold text-amber-800 uppercase mb-2">Rescue: Missing Payment Hash?</p>
+                              <p className="text-xs text-amber-700 mb-3">
+                                If Nostr hasn't updated yet, paste the **BNB Lock Transaction Hash** below to recover the hashlock directly from the blockchain.
+                              </p>
                               <div className="flex gap-2">
                                 <input
                                   type="text"
-                                  value={manualInvoice}
-                                  onChange={(e) => setManualInvoice(e.target.value)}
-                                  placeholder="lnbc..."
-                                  className="flex-1 p-3 border border-indigo-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                                  value={recoveryTxHash}
+                                  onChange={(e) => setRecoveryTxHash(e.target.value)}
+                                  placeholder="0x... (Transaction Hash)"
+                                  className="flex-1 p-2.5 border border-amber-300 rounded-md text-xs font-mono focus:ring-2 focus:ring-amber-500 outline-none bg-white/50"
                                 />
                                 <button
-                                  onClick={handleClaimerSubmitInvoice}
-                                  disabled={!manualInvoice || !effectiveInvoicePaymentHash}
-                                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold disabled:opacity-50 transition duration-200 shadow-md"
+                                  onClick={verifyBNBLock}
+                                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-md transition shadow-sm"
                                 >
-                                  Submit
+                                  Import
                                 </button>
                               </div>
-                              {manualInvoice && effectiveInvoicePaymentHash && (
-                                <p className="text-xs text-green-600 font-medium flex items-center gap-1">
-                                  <span>✅</span> Valid invoice: {effectiveInvoicePaymentHash.substring(0, 10)}...
-                                </p>
-                              )}
                             </div>
                           )}
-                        </div>
-                      )}
-
-                      {/* Step 1: Verify BNB Lock */}
-                      <div className="mb-6">
-                        <h3 className="text-lg font-medium text-gray-700 mb-2">1. Verify BNB Lock</h3>
-                        <p className="text-sm text-gray-600 mb-2">Check if the BNB has been locked on the contract.</p>
-                        <div className="flex items-center gap-4">
-                          <button
-                            onClick={verifyBNBLock}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md transition duration-200"
-                          >
-                            Verify Lock
-                          </button>
-                          {bnbLockVerified && <span className="text-green-600 font-bold flex items-center gap-1">✅ Verified</span>}
                         </div>
                       </div>
 
                       {/* Step 2: Pay Invoice */}
-                      <div className={`mb-6 p-4 rounded-lg border transition duration-200 ${bnbLockVerified ? 'bg-white border-gray-200' : 'bg-gray-50 border-gray-200 opacity-50'}`}>
-                        <h3 className="text-lg font-medium text-gray-700 mb-2">2. Pay Invoice</h3>
-                        {!bnbLockVerified && <p className="text-xs text-amber-600 mb-2">Please verify lock first.</p>}
+                      <div className={`mb-8 p-6 rounded-xl border transition duration-200 ${bnbLockVerified ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-50 border-slate-200 shadow-inner'}`}>
+                        <h3 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2">
+                          <span>2️⃣</span> Pay Lightning Invoice
+                        </h3>
+                        {!bnbLockVerified && <p className="text-[11px] text-amber-600 mb-3 font-semibold bg-amber-50 px-2 py-1 rounded inline-block">⚠️ Step 3 Claim will unlock after you Pay & Verify Step 1.</p>}
+
 
                         {effectiveInvoicePaymentRequest ? (
                           <div className="space-y-4">
-                            <InvoiceDecoder invoice={effectiveInvoicePaymentRequest} title="Invoice to Pay" />
+                            <InvoiceDecoder invoice={effectiveInvoicePaymentRequest} title="Found Invoice" />
 
-                            <div className="flex flex-col gap-2">
-                              <button
-                                onClick={handlePayInvoice}
-                                disabled={!bnbLockVerified || !isLncApiReady() || isPayingInvoice}
-                                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md disabled:opacity-50 transition duration-200"
-                              >
-                                {isPayingInvoice ? 'Paying...' : 'Pay with LNC (Auto Claim)'}
-                              </button>
-                              {!isLncApiReady() && <p className="text-xs text-red-500">LNC not connected.</p>}
+                            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-4">
+                              <div>
+                                <p className="text-xs font-bold text-slate-500 uppercase mb-2">Option A: Pay via LNC</p>
+                                <button
+                                  onClick={handlePayInvoice}
+                                  disabled={!bnbLockVerified || !isLncApiReady() || isPayingInvoice}
+                                  className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg disabled:opacity-50 transition duration-200 shadow-md flex items-center justify-center gap-2"
+                                >
+                                  {isPayingInvoice ? 'Processing Payment...' : '⚡ Pay with Connected Node'}
+                                </button>
+                                {!isLncApiReady() && <p className="text-[10px] text-red-500 mt-1 text-center">Lightning Node not connected via LNC.</p>}
+                              </div>
 
-                              <div className="mt-2 border-t pt-2">
-                                <p className="text-xs text-gray-500 mb-1">Or enter preimage manually (if paid externally):</p>
+                              <div className="relative flex items-center py-2">
+                                <div className="flex-grow border-t border-slate-300"></div>
+                                <span className="flex-shrink mx-4 text-xs font-bold text-slate-400 uppercase">OR</span>
+                                <div className="flex-grow border-t border-slate-300"></div>
+                              </div>
+
+                              <div>
+                                <p className="text-xs font-bold text-slate-500 uppercase mb-2">Option B: Paid Externally?</p>
+                                <p className="text-[10px] text-slate-500 mb-2">
+                                  If you used a different wallet to pay, enter the 32-byte Preimage (Hex) below to claim.
+                                </p>
                                 <input
                                   type="text"
                                   value={claimerPreimage}
                                   onChange={(e) => setClaimerPreimage(e.target.value)}
-                                  placeholder="Preimage Hex (32 bytes)"
-                                  className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-purple-500 outline-none"
-                                  disabled={!bnbLockVerified}
+                                  placeholder="Preimage Hex (0x...)"
+                                  className="w-full p-2.5 border border-slate-300 rounded-md text-xs font-mono focus:ring-2 focus:ring-purple-500 outline-none bg-white"
                                 />
                               </div>
                             </div>
                           </div>
                         ) : (
-                          <div className="p-4 bg-gray-100 rounded text-center">
-                            <p className="text-sm text-gray-500">Waiting for invoice...</p>
+                          <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 border-dashed">
+                            <div className="flex flex-col items-center mb-4">
+                              <p className="text-sm text-slate-500 font-bold">Searching for Invoice on Nostr...</p>
+                              <p className="text-xs text-slate-400 mt-1">Wait for the Locker to publish it, or import manually:</p>
+                            </div>
+                            <div className="space-y-3">
+                              <textarea
+                                value={manualInvoice}
+                                onChange={(e) => setManualInvoice(e.target.value)}
+                                placeholder="lnbc... (Lightning Invoice)"
+                                className="w-full p-3 border border-slate-300 rounded-lg text-xs font-mono focus:ring-2 focus:ring-purple-500 outline-none h-20 bg-white"
+                              />
+                            </div>
+                            <div className="mt-4 pt-4 border-t border-slate-200">
+                              <p className="text-xs font-bold text-slate-500 uppercase mb-2 text-center">Already Paid?</p>
+                              <input
+                                type="text"
+                                value={claimerPreimage}
+                                onChange={(e) => setClaimerPreimage(e.target.value)}
+                                placeholder="Enter Preimage Hex to jump to Claim step"
+                                className="w-full p-2.5 border border-slate-300 rounded-md text-xs font-mono focus:ring-2 focus:ring-purple-500 outline-none bg-white"
+                              />
+                            </div>
                           </div>
                         )}
                       </div>
 
                       {/* Step 3: Claim BNB */}
-                      <div className={`mb-6 p-4 rounded-lg border transition duration-200 ${claimerPreimage ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 opacity-50'}`}>
-                        <h3 className="text-lg font-medium text-gray-700 mb-2">3. Claim BNB</h3>
-                        <p className="text-sm text-gray-600 mb-2">Use the preimage to claim the locked BNB.</p>
+                      <div className={`mb-6 p-6 rounded-xl border transition duration-200 ${claimerPreimage ? 'bg-emerald-50 border-emerald-200 shadow-sm' : 'bg-slate-50 border-slate-200 opacity-60'}`}>
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            <span>3️⃣</span> Final Step: Claim BNB
+                          </h3>
+                          {claimTxHash && <span className="text-xs font-bold text-emerald-600 uppercase">Success!</span>}
+                        </div>
+                        <p className="text-sm text-slate-600 mb-4">
+                          Unlock the BNB from the contract using your preimage.
+                        </p>
 
                         <button
                           onClick={handleClaimBNB}
                           disabled={!claimerPreimage || isClaimingBnb}
-                          className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-md font-bold disabled:opacity-50 transition duration-200 w-full"
+                          className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-4 rounded-xl shadow-lg disabled:opacity-50 transition duration-200 flex items-center justify-center gap-2"
                         >
-                          {isClaimingBnb ? 'Claiming...' : 'Claim BNB'}
+                          {isClaimingBnb ? 'Submitting Claim...' : '🎉 Claim BNB'}
                         </button>
 
                         {claimTxHash && (
-                          <div className="mt-2 p-2 bg-white rounded border border-green-200">
-                            <p className="text-xs text-green-700 break-all">Tx: {claimTxHash}</p>
+                          <div className="mt-4 p-3 bg-white rounded-lg border border-emerald-200 flex flex-col gap-1">
+                            <p className="text-[10px] text-slate-400 font-bold uppercase">Transaction Hash</p>
+                            <p className="text-xs text-emerald-700 font-mono break-all">{claimTxHash}</p>
                           </div>
                         )}
                       </div>
