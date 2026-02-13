@@ -110,6 +110,16 @@ function AppContent() {
   const [claimerPreimage, setClaimerPreimage] = useState('');
   const [isPayingInvoice, setIsPayingInvoice] = useState(false);
   const [isClaimingBnb, setIsClaimingBnb] = useState(false);
+  const [invoiceMethod, setInvoiceMethod] = useState('manual');
+
+  // Set default method to LNC if it becomes available
+  useEffect(() => {
+    if (lncIsConnected) {
+      setInvoiceMethod('lnc');
+    } else {
+      setInvoiceMethod('manual');
+    }
+  }, [lncIsConnected]);
 
   const selectedPosterPubkey = selectedSwapIntention ? (selectedSwapIntention.posterPubkey || selectedSwapIntention.pubkey) : '';
   const isSelectedPoster = Boolean(selectedSwapIntention && selectedPosterPubkey === nostrPubkey);
@@ -661,6 +671,7 @@ function AppContent() {
       setInvoicePaymentHash(null);
       setPendingInvoice(null);
       setManualInvoice('');
+      setInvoiceMethod(lncIsConnected ? 'lnc' : 'manual');
       return;
     }
 
@@ -831,114 +842,137 @@ function AppContent() {
                   {isLockerRoleMatch && (
                     <>
                       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-2xl mt-2">
-                        <button
-                          onClick={handleGenerateInvoice}
-                          className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                          disabled={!canGenerateInvoice}
-                        >
-                          Generate Taproot Asset Invoice
-                        </button>
-                        {!!generateInvoiceDisabledReason && (
-                          <p className="text-xs text-gray-600 mt-2">{generateInvoiceDisabledReason}</p>
-                        )}
-
-                        {!selectedAsset && isTapdAvailable && (
-                          <p className="text-xs text-amber-600 mt-2">Please select a Taproot Asset above before generating invoice.</p>
-                        )}
-
-                        {!isTapdChannelsAvailable && isTapdAvailable && (
-                          <div className="mt-2 p-3 bg-blue-50 border border-blue-300 rounded-md">
-                            <p className="text-xs text-blue-800">
-                              <span className="font-semibold">ℹ️ LNC Limitation:</span> Taproot Asset Channels are not yet supported via LNC.
-                              Regular Lightning (BTC) invoices will be used instead.
-                              In the future, this will be updated to use Taproot Assets Lightning transactions.
-                              See tests in the contracts folder for Taproot Assets implementation.
-                            </p>
-                          </div>
-                        )}
-
-                        {!isTapdAvailable && (
-                          <p className="text-xs text-red-600 mt-2">Taproot Assets daemon not available. Make sure tapd is running with your LND node.</p>
-                        )}
-
-                        {pendingInvoiceForSelected && (
-                          <p className="text-xs text-amber-700 mt-2">
-                            Invoice is local only. It will be published automatically after successful BNB lock.
-                          </p>
-                        )}
-
-                        {effectiveInvoicePaymentRequest && !manualInvoice && (
-                          <div className="mt-4 p-4 bg-green-50 rounded-md">
-                            <p className="font-semibold text-green-800">Current invoice:</p>
-                            <p className="break-all text-sm text-green-700">{effectiveInvoicePaymentRequest}</p>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Generated Invoice Decoder */}
-                      {effectiveInvoicePaymentRequest && !manualInvoice && (
-                        <div className="mt-6 w-full max-w-2xl">
-                          <InvoiceDecoder
-                            invoice={effectiveInvoicePaymentRequest}
-                            title="Generated Invoice Details"
-                          />
-                        </div>
-                      )}
-
-                      {/* Manual Invoice Input */}
-                      <div className="mt-8 bg-white p-6 rounded-lg shadow-md border border-gray-200 w-full max-w-2xl">
-                        <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                          <span>📝</span> Or Paste Invoice Manually
+                        <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                          <span>⚡</span> Choose Invoice Method
                         </h3>
-                        <p className="text-sm text-gray-600 mb-4">
-                          If you have an invoice from another source, paste it here to decode and view details.
-                        </p>
-                        <textarea
-                          value={manualInvoice}
-                          onChange={(e) => setManualInvoice(e.target.value)}
-                          placeholder="lnbc... or lnbcrt... (paste Lightning invoice here)"
-                          className="w-full p-3 border border-gray-300 rounded-lg font-mono text-sm resize-vertical min-h-[100px] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                        />
-                        {manualInvoice && (
+
+                        <div className="flex p-1 bg-gray-100 rounded-lg mb-6">
                           <button
-                            onClick={() => setManualInvoice('')}
-                            className="mt-2 text-sm text-gray-600 hover:text-gray-800 underline"
+                            onClick={() => setInvoiceMethod('lnc')}
+                            disabled={!lncIsConnected}
+                            className={`flex-1 py-2 text-sm font-medium rounded-md transition ${invoiceMethod === 'lnc'
+                              ? 'bg-white text-indigo-600 shadow-sm'
+                              : 'text-gray-500 hover:text-gray-700'
+                              } ${!lncIsConnected ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
-                            Clear
+                            LNC (Auto)
                           </button>
+                          <button
+                            onClick={() => setInvoiceMethod('manual')}
+                            className={`flex-1 py-2 text-sm font-medium rounded-md transition ${invoiceMethod === 'manual'
+                              ? 'bg-white text-indigo-600 shadow-sm'
+                              : 'text-gray-500 hover:text-gray-700'
+                              }`}
+                          >
+                            Manual (Polar/External)
+                          </button>
+                        </div>
+
+                        {invoiceMethod === 'lnc' ? (
+                          <div className="space-y-4">
+                            <button
+                              onClick={handleGenerateInvoice}
+                              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                              disabled={!canGenerateInvoice}
+                            >
+                              Generate Lightning/Taproot Invoice
+                            </button>
+                            {!!generateInvoiceDisabledReason && (
+                              <p className="text-xs text-gray-600 text-center">{generateInvoiceDisabledReason}</p>
+                            )}
+
+                            {!selectedAsset && isTapdAvailable && (
+                              <p className="text-xs text-amber-600 text-center">Please select a Taproot Asset above before generating invoice.</p>
+                            )}
+
+                            {!isTapdChannelsAvailable && isTapdAvailable && (
+                              <div className="p-3 bg-blue-50 border border-blue-300 rounded-md">
+                                <p className="text-xs text-blue-800">
+                                  <span className="font-semibold">ℹ️ LNC Limitation:</span> Taproot Asset Channels are not yet supported via LNC.
+                                  Regular Lightning (BTC) invoices will be used instead.
+                                </p>
+                              </div>
+                            )}
+
+                            {!isTapdAvailable && (
+                              <p className="text-xs text-red-600 text-center">Taproot Assets daemon not available.</p>
+                            )}
+
+                            {pendingInvoiceForSelected && (
+                              <p className="text-xs text-amber-700 text-center italic">
+                                Invoice is local. It will be published after BNB lock.
+                              </p>
+                            )}
+
+                            {effectiveInvoicePaymentRequest && !manualInvoice && (
+                              <div className="mt-4 p-4 bg-green-50 rounded-md border border-green-100">
+                                <p className="font-semibold text-green-800 text-sm mb-1 text-center">✅ Invoice Ready</p>
+                                <InvoiceDecoder
+                                  invoice={effectiveInvoicePaymentRequest}
+                                  title="LNC Invoice Details"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            <p className="text-sm text-gray-600">
+                              Paste an invoice from Polar or another wallet to continue.
+                            </p>
+                            <textarea
+                              value={manualInvoice}
+                              onChange={(e) => setManualInvoice(e.target.value)}
+                              placeholder="lnbc... or lnbcrt..."
+                              className="w-full p-4 border border-gray-300 rounded-lg font-mono text-sm resize-none min-h-[120px] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            />
+                            {manualInvoice && (
+                              <div className="flex justify-between items-center">
+                                <button
+                                  onClick={() => setManualInvoice('')}
+                                  className="text-sm text-red-600 hover:text-red-800 underline transition"
+                                >
+                                  Clear Invoice
+                                </button>
+                                <span className="text-xs text-gray-500">Invoice detected ({manualInvoice.length} chars)</span>
+                              </div>
+                            )}
+
+                            {manualInvoice && (
+                              <div className="mt-4">
+                                <InvoiceDecoder
+                                  invoice={manualInvoice}
+                                  title="Pasted Invoice Details"
+                                />
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
 
-                      {/* Manual Invoice Decoder */}
-                      {manualInvoice && (
-                        <div className="mt-6 w-full max-w-2xl">
-                          <InvoiceDecoder
-                            invoice={manualInvoice}
-                            title="Pasted Invoice Details"
-                          />
-                        </div>
-                      )}
-
-                      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-2xl mt-8">
-                        <h2 className="text-2xl font-semibold text-gray-700 mb-4">BNB Lock Step</h2>
-                        <p className="text-sm text-gray-700 mb-2">
-                          Lock BNB after invoice generation. Invoice is published to Nostr only after this step succeeds.
+                      {/* BNB Lock Step - Always visible if an invoice hash is available */}
+                      <div className={`bg-white p-8 rounded-lg shadow-md w-full max-w-2xl mt-6 border-2 transition ${effectiveInvoicePaymentHash ? 'border-orange-100 opacity-100' : 'border-gray-100 opacity-50'}`}>
+                        <h2 className="text-2xl font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                          <span>🔒</span> Final Step: Lock BNB
+                        </h2>
+                        <p className="text-sm text-gray-600 mb-6">
+                          Once you have an invoice (via LNC or Manual paste), lock the BNB on-chain to continue the swap.
                         </p>
                         <button
                           onClick={initiateBNBSwap}
-                          className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-4 px-6 rounded-xl transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
                           disabled={!isConnected || !canLockBnb}
                         >
-                          Lock BNB on BSC
+                          Send Transaction: Lock BNB on BSC
                         </button>
                         {!!lockBnbDisabledReason && (
-                          <p className="text-xs text-gray-600 mt-2">{lockBnbDisabledReason}</p>
+                          <p className="text-xs text-amber-700 mt-3 text-center bg-amber-50 p-2 rounded">{lockBnbDisabledReason}</p>
                         )}
 
                         {invoicePreimage && (
-                          <div className="mt-4 p-4 bg-green-50 rounded-md">
-                            <p className="font-semibold">Preimage:</p>
-                            <p className="break-all text-sm text-green-800">{invoicePreimage}</p>
+                          <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200">
+                            <p className="font-bold text-green-800 flex items-center gap-1">✨ Preimage Revealed:</p>
+                            <p className="break-all text-xs text-green-700 font-mono mt-1">{invoicePreimage}</p>
+                            <p className="text-[10px] text-green-600 mt-2 italic">Locker: Use this preimage to claim the wanted asset (Taproot/BTC) on Lightning.</p>
                           </div>
                         )}
                       </div>
@@ -974,44 +1008,70 @@ function AppContent() {
 
                       {/* Step 0: Provide Payment Invoice */}
                       {selectedSwapIntention.status === 'accepted' && (
-                        <div className="mb-6 p-4 rounded-lg border border-indigo-200 bg-indigo-50">
-                          <h3 className="text-lg font-medium text-gray-700 mb-2">0. Provide Payment Invoice</h3>
-                          <p className="text-sm text-gray-600 mb-2">Provide a Lightning invoice for <strong>{selectedSwapIntention.amountSats} sats</strong>.</p>
+                        <div className="mb-8 p-6 rounded-xl border border-indigo-100 bg-indigo-50/50 shadow-sm">
+                          <h3 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                            <span>0️⃣</span> Provide Payment Invoice
+                          </h3>
+                          <p className="text-sm text-gray-600 mb-6">
+                            Provide a Lightning invoice for <strong className="text-indigo-700">{selectedSwapIntention.amountSats} sats</strong> to continue.
+                          </p>
 
-                          {/* Option A: Manual Input */}
-                          <div className="mb-4">
-                            <label className="block text-xs text-gray-500 mb-1">Manual Invoice (lnbc...)</label>
-                            <div className="flex gap-2">
-                              <input
-                                type="text"
-                                value={manualInvoice}
-                                onChange={(e) => setManualInvoice(e.target.value)}
-                                placeholder="lnbc..."
-                                className="flex-1 p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-purple-500 outline-none"
-                              />
-                              <button
-                                onClick={handleClaimerSubmitInvoice}
-                                disabled={!manualInvoice || !effectiveInvoicePaymentHash}
-                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md disabled:opacity-50 transition duration-200"
-                              >
-                                Submit
-                              </button>
-                            </div>
-                            {manualInvoice && effectiveInvoicePaymentHash && (
-                              <p className="text-xs text-green-600 mt-1">Valid invoice detected: {effectiveInvoicePaymentHash.substring(0, 10)}...</p>
-                            )}
+                          <div className="flex p-1 bg-white/50 backdrop-blur-sm rounded-lg mb-6 border border-indigo-100">
+                            <button
+                              onClick={() => setInvoiceMethod('lnc')}
+                              disabled={!lncIsConnected}
+                              className={`flex-1 py-2 text-sm font-medium rounded-md transition ${invoiceMethod === 'lnc'
+                                ? 'bg-white text-indigo-600 shadow-sm'
+                                : 'text-gray-500 hover:text-gray-700'
+                                } ${!lncIsConnected ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                              LNC (Auto)
+                            </button>
+                            <button
+                              onClick={() => setInvoiceMethod('manual')}
+                              className={`flex-1 py-2 text-sm font-medium rounded-md transition ${invoiceMethod === 'manual'
+                                ? 'bg-white text-indigo-600 shadow-sm'
+                                : 'text-gray-500 hover:text-gray-700'
+                                }`}
+                            >
+                              Manual Paste
+                            </button>
                           </div>
 
-                          {/* Option B: Generate with LNC */}
-                          {isLncApiReady() && (
-                            <div className="border-t border-indigo-200 pt-4 mt-4">
-                              <p className="text-sm font-medium text-gray-700 mb-2">Or generate automatically via LNC:</p>
+                          {invoiceMethod === 'lnc' ? (
+                            <div className="space-y-4">
+                              <p className="text-xs text-indigo-600 mb-2">Generate and publish an invoice automatically using your connected LNC node.</p>
                               <button
                                 onClick={handleClaimerGenerateInvoice}
-                                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md transition duration-200 w-full"
+                                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 shadow-md"
                               >
-                                Generate & Publish Invoice (Auto)
+                                Generate & Publish (LNC)
                               </button>
+                            </div>
+                          ) : (
+                            <div className="space-y-4">
+                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Manual Invoice (lnbc...)</label>
+                              <div className="flex gap-2">
+                                <input
+                                  type="text"
+                                  value={manualInvoice}
+                                  onChange={(e) => setManualInvoice(e.target.value)}
+                                  placeholder="lnbc..."
+                                  className="flex-1 p-3 border border-indigo-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                                />
+                                <button
+                                  onClick={handleClaimerSubmitInvoice}
+                                  disabled={!manualInvoice || !effectiveInvoicePaymentHash}
+                                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold disabled:opacity-50 transition duration-200 shadow-md"
+                                >
+                                  Submit
+                                </button>
+                              </div>
+                              {manualInvoice && effectiveInvoicePaymentHash && (
+                                <p className="text-xs text-green-600 font-medium flex items-center gap-1">
+                                  <span>✅</span> Valid invoice: {effectiveInvoicePaymentHash.substring(0, 10)}...
+                                </p>
+                              )}
                             </div>
                           )}
                         </div>
