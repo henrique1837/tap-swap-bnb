@@ -78,7 +78,21 @@ npm run dev
 
 ### 4) Execute Step (Invoice + Lock)
 
-![Execute Tab](./docs/images/execute-tab.png)
+  4.1 Generate a taproot asset lightning invoice using Polar
+
+![Execute Tab - Invoice Creation](./docs/images/polar-invoice-creation.png)
+
+  4.2 Invoice created
+
+![Execute Tab - Invoice Done](./docs/images/polar-invoice-done.png)
+
+  4.3 Invoice Paste (LNC does not supports taproot asset invoices yet, so we need to paste it manually, we allow using a normal invoice to test LNC);
+
+![Execute Tab - Invoice Paste](./docs/images/paste-invoice.png)
+
+  4.4 Lock BNB - The invoice hashlock is used to lock the BNB on the atomic swap contract, the secret needed to release it is revealed after the invoice is paid for the user that pays it;
+
+![Execute Tab - Lock BNB](./docs/images/lock-bnb.png)
 
 ### 5) Success / Invoice Published
 
