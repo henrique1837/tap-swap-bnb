@@ -14,9 +14,8 @@ const SimpleSwapIntentionCard = ({ intention, onSelect, isSelected, onAccept, ca
 
   return (
     <div
-      className={`bg-white border rounded-lg p-4 shadow-sm hover:shadow-md transition duration-200 ${
-        isSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'
-      }`}
+      className={`bg-white border rounded-lg p-4 shadow-sm hover:shadow-md transition duration-200 ${isSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'
+        }`}
     >
       <div className="flex items-center mb-2 gap-3">
         <h4 className="font-semibold text-gray-800">
@@ -92,11 +91,7 @@ function SwapIntentionsList({
   const [isFetchingIntentions, setIsFetchingIntentions] = useState(false);
 
   const fetchAndSetSwapIntentions = useCallback(async () => {
-    if (!nostrPubkey) {
-      setSwapIntentions([]);
-      return;
-    }
-
+    // Guests can fetch intentions too
     setIsFetchingIntentions(true);
     try {
       const fetchedIntentions = await fetchSwapIntentions();
@@ -147,10 +142,21 @@ function SwapIntentionsList({
         </p>
       )}
 
+      {!nostrPubkey && (
+        <div className="p-4 mb-6 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-lg shadow-sm">
+          <p className="text-indigo-800 font-bold flex items-center gap-2">
+            <span>👋</span> Exploring as Guest
+          </p>
+          <p className="text-sm text-indigo-700 mt-1">
+            Login to accept swap intentions, or select one to explore the app flow.
+          </p>
+        </div>
+      )}
+
       <button
         onClick={fetchAndSetSwapIntentions}
         className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded transition duration-300 disabled:opacity-50"
-        disabled={isFetchingIntentions || !nostrPubkey}
+        disabled={isFetchingIntentions}
       >
         {isFetchingIntentions ? 'Refreshing...' : 'Refresh Intentions'}
       </button>
