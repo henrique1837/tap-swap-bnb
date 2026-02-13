@@ -124,6 +124,13 @@ function AppContent() {
     }
   }, [lncIsConnected]);
 
+  // Auto-close connect modal when both are connected
+  useEffect(() => {
+    if (lncIsConnected && isConnected) {
+      setIsConnectModalOpen(false);
+    }
+  }, [lncIsConnected, isConnected]);
+
   const selectedPosterPubkey = selectedSwapIntention ? (selectedSwapIntention.posterPubkey || selectedSwapIntention.pubkey) : '';
   const isSelectedPoster = Boolean(selectedSwapIntention && selectedPosterPubkey === nostrPubkey);
   const isSelectedAccepter = Boolean(selectedSwapIntention && selectedSwapIntention.acceptedByPubkey === nostrPubkey);

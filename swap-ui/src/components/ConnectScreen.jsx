@@ -185,12 +185,16 @@ function ConnectScreen({
 
       {/* Guest Option */}
       <div className="py-6 border-t border-slate-100 flex flex-col items-center">
-        <p className="text-xs text-slate-400 mb-4 font-medium italic">Already have active swaps? Browse as guest below.</p>
+        <p className="text-xs text-slate-400 mb-4 font-medium italic">
+          {lncIsConnected && isWeb3Connected
+            ? "You're all set! Ready to start swapping."
+            : "Already have active swaps? Browse as guest below."}
+        </p>
         <button
           onClick={onExploreAsGuest}
           className="group relative px-6 py-2 bg-white text-slate-600 hover:text-indigo-600 font-bold text-sm transition-all"
         >
-          <span>Continue as Guest</span>
+          <span>{lncIsConnected && isWeb3Connected ? "Enter App" : "Continue as Guest"}</span>
           <div className="absolute bottom-1.5 left-6 right-6 h-[2px] bg-slate-200 group-hover:bg-indigo-500 transition-colors"></div>
         </button>
       </div>
