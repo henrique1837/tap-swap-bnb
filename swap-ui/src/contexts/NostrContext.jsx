@@ -387,6 +387,7 @@ export const NostrProvider = ({ children }) => {
         deriveNostrKeysFromLNC,
         isLoadingNostr,
         disconnectNostr,
+        nostrPrivkey: privKey,
       }}
     >
       {children}

@@ -6,6 +6,7 @@ function Header({
     walletConnected,
     onOpenNostrModal,
     onOpenNodeModal,
+    onOpenConnectModal,
     walletAddress
 }) {
     const [showWalletTooltip, setShowWalletTooltip] = useState(false);
@@ -70,11 +71,10 @@ function Header({
                             </div>
                         </div>
 
-                        {/* Quick Action Buttons */}
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={onOpenNodeModal}
-                                className="bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm text-white px-4 py-2 rounded-lg font-medium transition duration-200 flex items-center gap-2 shadow-lg"
+                                className="bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm text-white px-3 py-2 rounded-lg font-medium transition duration-200 flex items-center gap-2 shadow-sm"
                                 title="Lightning Node Info"
                             >
                                 <span className="text-lg">⚡</span>
@@ -83,11 +83,31 @@ function Header({
 
                             <button
                                 onClick={onOpenNostrModal}
-                                className="bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm text-white px-4 py-2 rounded-lg font-medium transition duration-200 flex items-center gap-2 shadow-lg"
+                                className="bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm text-white px-3 py-2 rounded-lg font-medium transition duration-200 flex items-center gap-2 shadow-sm"
                                 title="Nostr Identity"
                             >
                                 <span className="text-lg">🔑</span>
                                 <span className="hidden sm:inline">Nostr</span>
+                            </button>
+
+                            <div className="h-8 w-[1px] bg-white bg-opacity-30 mx-1"></div>
+
+                            <button
+                                onClick={onOpenConnectModal}
+                                className={`px-4 py-2 rounded-lg font-bold transition duration-200 shadow-lg flex items-center gap-2 ${lncIsConnected && walletConnected
+                                    ? 'bg-red-500 hover:bg-red-600 text-white'
+                                    : 'bg-white text-indigo-600 hover:bg-indigo-50'
+                                    }`}
+                            >
+                                {lncIsConnected && walletConnected ? (
+                                    <>
+                                        <span>🚪</span> Logout
+                                    </>
+                                ) : (
+                                    <>
+                                        <span>🚀</span> Login
+                                    </>
+                                )}
                             </button>
                         </div>
                     </div>

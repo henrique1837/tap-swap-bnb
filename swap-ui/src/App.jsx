@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useAccount, useWalletClient, usePublicClient, useConnect, useChainId, useChains } from 'wagmi';
+import { useAccount, useWalletClient, usePublicClient, useConnect, useChainId, useChains, useDisconnect } from 'wagmi';
 import { injected } from 'wagmi/connectors';
 import { useLNC } from './hooks/useLNC';
 import { useTaprootAssets } from './hooks/useTaprootAssets';
@@ -40,6 +40,7 @@ function AppContent() {
   const currentChainId = useChainId();
   const configuredChains = useChains();
   const currentChain = configuredChains.find((c) => c.id === currentChainId);
+  const { disconnect: disconnectWeb3 } = useDisconnect();
 
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
@@ -77,6 +78,7 @@ function AppContent() {
     publishInvoiceForIntention,
     deriveNostrKeysFromLNC,
     isLoadingNostr,
+    nostrPrivkey,
   } = useNostr();
 
   const [errorMessage, setErrorMessage] = useState('');
@@ -97,6 +99,7 @@ function AppContent() {
   // Modal states
   const [isNostrModalOpen, setIsNostrModalOpen] = useState(false);
   const [isNodeModalOpen, setIsNodeModalOpen] = useState(false);
+  const [isConnectModalOpen, setIsConnectModalOpen] = useState(!lncIsConnected || !isConnected);
 
   // Locally generated invoice that is not yet published to Nostr.
   const [pendingInvoice, setPendingInvoice] = useState(null);
@@ -690,30 +693,13 @@ function AppContent() {
     }
   }, [selectedSwapIntention, pendingInvoice]);
 
-  if (!isLncApiReady() || !isConnected) {
-    return (
-      <ConnectScreen
-        darkMode={false}
-        toggleDarkMode={() => { }}
-        pairingPhrase={lncPairingPhrase}
-        setPairingPhrase={handleLncPairingPhraseChange}
-        lncPassword={lncPassword}
-        setLncPassword={handleLncPasswordChange}
-        isConnectingLNC={lncStatus === 'Connecting'}
-        handleConnectLNCWithPairing={handleConnectLNCWithPairing}
-        handleLoginLNCWithPassword={handleLoginLNCWithPassword}
-        handleDisconnectLNC={disconnectLNC}
-        connectionErrorLNC={errorMessage || lncError}
-        isWeb3Connected={isConnected}
-        web3Address={address}
-        web3ChainName={currentChain?.name}
-        handleConnectWeb3={() => connect({ connector: injected() })}
-        isWeb3Connecting={wagmiIsConnecting}
-        lncIsPaired={lncIsPaired}
-        lncIsConnected={isLncApiReady()}
-      />
-    );
-  }
+  const handleGlobalLogout = useCallback(() => {
+    disconnectLNC();
+    disconnectWeb3();
+    setIsConnectModalOpen(true);
+  }, [disconnectLNC, disconnectWeb3]);
+
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50">
@@ -725,9 +711,36 @@ function AppContent() {
         walletAddress={address}
         onOpenNostrModal={() => setIsNostrModalOpen(true)}
         onOpenNodeModal={() => setIsNodeModalOpen(true)}
+        onOpenConnectModal={lncIsConnected && isConnected ? handleGlobalLogout : () => setIsConnectModalOpen(true)}
       />
 
       {/* Modals */}
+      <Modal
+        isOpen={isConnectModalOpen}
+        onClose={() => setIsConnectModalOpen(false)}
+        title="Welcome to Atomic Swap"
+      >
+        <ConnectScreen
+          pairingPhrase={lncPairingPhrase}
+          setPairingPhrase={handleLncPairingPhraseChange}
+          lncPassword={lncPassword}
+          setLncPassword={handleLncPasswordChange}
+          isConnectingLNC={lncStatus === 'Connecting'}
+          handleConnectLNCWithPairing={handleConnectLNCWithPairing}
+          handleLoginLNCWithPassword={handleLoginLNCWithPassword}
+          handleDisconnectLNC={disconnectLNC}
+          connectionErrorLNC={errorMessage || lncError}
+          isWeb3Connected={isConnected}
+          web3Address={address}
+          web3ChainName={currentChain?.name}
+          handleConnectWeb3={() => connect({ connector: injected() })}
+          isWeb3Connecting={wagmiIsConnecting}
+          lncIsPaired={lncIsPaired}
+          lncIsConnected={lncIsConnected}
+          onExploreAsGuest={() => setIsConnectModalOpen(false)}
+        />
+      </Modal>
+
       <Modal
         isOpen={isNostrModalOpen}
         onClose={() => setIsNostrModalOpen(false)}
@@ -741,7 +754,10 @@ function AppContent() {
         onClose={() => setIsNodeModalOpen(false)}
         title="Lightning Node Info"
       >
-        <NodeInfo lncClient={lncClient} isConnected={lncIsConnected} />
+        <NodeInfo
+          lncClient={lncClient}
+          isConnected={lncIsConnected}
+        />
       </Modal>
 
       {/* Main Content */}
