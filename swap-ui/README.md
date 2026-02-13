@@ -62,6 +62,15 @@ npm install
 npm run dev
 ```
 
+## Demo Video
+
+https://drive.google.com/file/d/1eg1NcjI6ijMNVtnVTyh3c55NCYTrCYhi/view?usp=sharing
+
+<video width="640" height="480" controls>
+  <source src="https://drive.google.com/file/d/1eg1NcjI6ijMNVtnVTyh3c55NCYTrCYhi/view?usp=sharing" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
 ## Screenshot Placeholders
 
 ### 1) Connect Screen
