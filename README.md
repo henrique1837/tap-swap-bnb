@@ -10,6 +10,10 @@ Nostr is used as the communication layer for swap intentions and coordination ev
 
 https://testnet.bscscan.com/address/0x63189b272c97d148a609ed6c3b99075abf0c1693
 
+## Tutorial User Interface
+
+https://github.com/henrique1837/tap-swap-bnb/blob/main/swap-ui/README.md
+
 ## Intent
 
 This project demonstrates a practical cross-domain swap UX where participants:
