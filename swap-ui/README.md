@@ -104,9 +104,9 @@ npm run dev
 
 ![Claim 1](./docs/images/select-claim.png)
 
-  6.2 Pay invoice
+  6.2 Copy Invoice to Pay (or use LNC to pay, you need to use the Bob's node to pay the invoice, so you need to generate a LNC session for Bob's node to connect to lightning terminal or disconect from the app and connect using bob's LNC);
 
-![Claim 2](./docs/images/invoice-toPay.png)
+![Claim 2](./docs/images/invoice-topay.png)
 
   6.3 Generating LNC session for Bob polar node to connect to lightning terminal 
 
