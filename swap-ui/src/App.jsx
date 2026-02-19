@@ -25,7 +25,7 @@ import InvoiceDecoder from './components/InvoiceDecoder';
 const base64ToHex = (base64) => `0x${Buffer.from(base64, 'base64').toString('hex')}`;
 
 const SWAP_AMOUNT_TAP_SATOSHIS = 500;
-const SWAP_AMOUNT_BNB = parseEther('0.00015');
+const SWAP_AMOUNT_BNB = parseEther('0.00005');
 const BNB_TIMELOCK_OFFSET = 3600;
 
 const ATOMIC_SWAP_BNB_CONTRACT_ADDRESS = '0x63189b272c97d148a609ed6c3b99075abf0c1693';

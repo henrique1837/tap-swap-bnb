@@ -17,8 +17,8 @@ function CreateSwapIntention({
       </p>
 
       <div className="mb-4 p-4 bg-gray-50 rounded-md">
-        <p className="text-sm text-gray-700"><strong>You offer:</strong> {swapAmountBNB} BNB</p>
-        <p className="text-sm text-gray-700"><strong>You request:</strong> {SWAP_AMOUNT_TAP_SATOSHIS} sats equivalent</p>
+        <p className="text-sm text-gray-700"><strong>You offer:</strong> {swapAmountBNB} Wei BNB</p>
+        <p className="text-sm text-gray-700"><strong>You request:</strong> {SWAP_AMOUNT_TAP_SATOSHIS} Taproot Asset BNB equivalent</p>
       </div>
 
       <label className="block text-sm text-gray-700 mb-2 font-medium" htmlFor="wanted-asset">
