@@ -27,11 +27,11 @@ const SimpleSwapIntentionCard = ({ intention, onSelect, isSelected, onAccept, ca
       </div>
 
       <p className="text-gray-700">
-        Wants: <strong className="text-indigo-600">{intention.wantedAsset || 'BNB'}</strong>
+        Wants: <strong className="text-indigo-600">{intention.wantedAsset || 'Wei BNB'}</strong>
       </p>
       <p className="text-gray-700">
-        Swap <strong className="text-green-600">{intention.amountBNB} BNB</strong>
-        {' '}for <strong className="text-yellow-600">{intention.amountSats} sats</strong>
+        Swap <strong className="text-green-600">{intention.amountBNB} Wei BNB</strong>
+        {' '}for <strong className="text-yellow-600">{intention.amountSats} Taproot Asset BNB equivalent</strong>
       </p>
 
       {intention.paymentHash && (
